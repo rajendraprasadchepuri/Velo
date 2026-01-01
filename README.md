@@ -96,5 +96,6 @@ streamlit run app.py
 
 This application is for internal purpose only. It is not financial advice. algorithmic predictions can be wrong. Always do your own research before investing.
 
-Contact : Prasanna - +918851924366
-        : Rajendra Prasad - +919676260340
+### Contact : 
+    Prasanna - +918851924366
+    Rajendra Prasad - +919676260340      
