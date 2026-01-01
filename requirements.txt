@@ -1,0 +1,11 @@
+yfinance
+pandas
+numpy
+scikit-learn
+ta
+textblob
+streamlit
+plotly
+xgboost
+prophet
+statsmodels
