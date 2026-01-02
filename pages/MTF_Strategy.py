@@ -8,10 +8,12 @@ add_logo()
 
 st.title("Ultra-Precision MTF Strategy")
 st.markdown("""
-This strategy focuses on **high-probability trades** by combining:
-- **Market Guardrails:** Checks if Nifty 50 and Sector indices are bullish.
-- **Trend Alignment:** Ensures stock price is above EMA20.
-- **Volume Confirmation:** Uses Volume Price Trend (VPT) to detect institutional buying.
+This **Ultra-Precision Scanner** identifies high-probability swing trades using a multi-factor model:
+
+- **📈 Trend & Momentum:** Price > EMA20 > EMA50 (Bullish Stack), RSI in sweet spot (50-75), and strong trend strength (ADX > 25).
+- **🏦 Institutional Flow:** Volume Price Trend (VPT) confirming accumulation.
+- **💎 Fundamental Quality:** Filters for profitable companies (ROE, Margins) and flags expensive valuations.
+- **🛡️ Risk Management:** Dynamic ATR-based Stop Loss and Target levels with time estimates.
 """)
 
 # Initialize session state
