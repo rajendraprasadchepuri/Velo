@@ -35,6 +35,9 @@ if st.button("🚀 Run Ultra-Precision Scanner"):
         # Sort by Raw Score desc
         df = df.sort_values(by="Raw Score", ascending=False)
         
+        # Filter for high confidence only
+        df = df[df['Confidence Score'] >= 80]
+        
         # Display Summary Metrics
         total_scanned = len(results)
         high_conviction = len(df[df['Signal'] == "STRONG BUY"])
@@ -54,18 +57,40 @@ if st.button("🚀 Run Ultra-Precision Scanner"):
 
         # Display Dataframe with style
         st.dataframe(
-            df[['Ticker', 'Signal', 'Confidence Score', 'Current Price', 'Market Correlation', 'Reasons']],
+            df[['Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
             use_container_width=True,
             column_config={
                 "Ticker": "Stock Symbol",
+                "Industry": "Sector",
                 "Signal": "Trade Signal",
                 "Confidence Score": st.column_config.ProgressColumn(
                     "Confidence",
                     help="Confidence score based on technicals",
-                    format="%s",
+                    format="%d%%",
                     min_value=0,
                     max_value=100,
                 ),
+                "Current Price": st.column_config.NumberColumn(format="₹%.2f"),
+                "Stop Loss": st.column_config.NumberColumn(format="₹%.2f"),
+                "Target Price": st.column_config.NumberColumn(format="₹%.2f"),
+                "Est. Days": "Timeframe",
+                "Reasoning": "Analysis",
+            }
+        )
+
+        st.subheader("Fundamental Analysis")
+        st.dataframe(
+            df[['Ticker', 'Fundamental Rating', 'Market Cap', 'P/E Ratio', 'P/B Ratio', 'ROE', 'Dividend Yield', 'Operating Margin']],
+            use_container_width=True,
+            column_config={
+                "Ticker": "Stock Symbol",
+                "Fundamental Rating": "Trend",
+                "Market Cap": st.column_config.NumberColumn("Market Cap", format="₹%d"), # Using integer format for large numbers or could use compact
+                "P/E Ratio": st.column_config.NumberColumn("P/E", format="%.2f"),
+                "P/B Ratio": st.column_config.NumberColumn("P/B", format="%.2f"),
+                "ROE": st.column_config.NumberColumn("ROE", format="%.2f%%"), # Assuming raw data is like 0.15 or 15, let's assume raw is 0.15 -> percent
+                "Dividend Yield": st.column_config.NumberColumn("Div Yield", format="%.2f%%"),
+                "Operating Margin": st.column_config.NumberColumn("Op Margin", format="%.2f%%"),
             }
         )
         
@@ -78,7 +103,7 @@ st.markdown("---")
 st.header("Strategy Backtest")
 st.markdown("Test the strategy performance on historical data.")
 
-col_b1, col_b2, col_b3 = st.columns(3)
+col_b1, col_b2, col_b3 = st.columns(3, vertical_alignment="bottom")
 backtest_ticker = col_b1.text_input("Ticker Symbol", "FEDERALBNK.NS")
 backtest_years = col_b2.number_input("Years to Backtest", min_value=1, max_value=5, value=1)
 run_backtest = col_b3.button("Run Backtest")

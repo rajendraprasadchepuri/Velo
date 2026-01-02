@@ -28,97 +28,155 @@ WATCHLIST = [
     "TATAPOWER.NS","TORNTPHARM.NS","TVSMOTOR.NS","UBL.NS","VOLTAS.NS",
     "WHIRLPOOL.NS","ZEEL.NS"
 ]
-
+"""WATCHLIST = [
+    # NIFTY 50
+    "ADANIENT.NS","ADANIPORTS.NS","APOLLOHOSP.NS","ASIANPAINT.NS","AXISBANK.NS",
+    "BAJAJ-AUTO.NS"]
+"""
 def get_ultra_precision_signal(ticker_symbol):
-    # 1. Map the stock to its sector index (Focusing on Indian Markets)
-    # Most MTF trades are in Bank or Nifty 50 stocks
     try:
         ticker = yf.Ticker(ticker_symbol)
         ticker_info = ticker.info
+        industry = ticker_info.get('industry', 'N/A')
+        
+        # Fundamentals
+        market_cap = ticker_info.get('marketCap')
+        pe_ratio = ticker_info.get('trailingPE')
+        pb_ratio = ticker_info.get('priceToBook')
+        roe = ticker_info.get('returnOnEquity')
+        div_yield = ticker_info.get('dividendYield')
+        op_margin = ticker_info.get('operatingMargins')
     except Exception:
         ticker_info = {}
+        industry = "N/A"
+        market_cap = pe_ratio = pb_ratio = roe = div_yield = op_margin = None
         
-    sector = ticker_info.get('sector', 'Unknown')
-    
-    # Define broad index (Nifty 50) and sector index (Bank Nifty as default for banks)
-    market_index = "^NSEI"  # Nifty 50
-    sector_index = "^NSEBANK" if "Bank" in ticker_info.get('industry', '') else "^NSEI"
-
-    # 2. Fetch Data for Stock, Sector, and Market
     def get_data(symbol):
-        df = yf.download(symbol, period="6mo", interval="1d", auto_adjust=True, progress=False)
+        df = yf.download(symbol, period="1y", interval="1d", auto_adjust=True, progress=False)
         if df.empty: return df
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         return df
 
     stock_df = get_data(ticker_symbol)
-    if stock_df.empty:
-        return None
+    if stock_df is None or stock_df.empty: return None
 
-    sector_df = get_data(sector_index)
-    market_df = get_data(market_index)
-
-    # 3. Guardrail Logic (The 'Anti-Error' Filters)
-    def is_bullish(df):
-        if df is None or df.empty: return False
-        ema20 = df['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
-        return df['Close'].iloc[-1] > ema20
-
-    market_support = is_bullish(market_df)
-    sector_support = is_bullish(sector_df)
+    # 1. Indicator Calculations
+    stock_df['EMA20'] = stock_df['Close'].ewm(span=20, adjust=False).mean()
+    stock_df['EMA50'] = stock_df['Close'].ewm(span=50, adjust=False).mean()
     
-    # 4. Correlation Check (Does this stock move with the index?)
-    correlation = 0
-    if not market_df.empty and len(stock_df) > 1 and len(market_df) > 1:
-        # Align dates
-        aligned_stock = stock_df['Close'].pct_change()
-        aligned_market = market_df['Close'].pct_change()
-        correlation = aligned_stock.corr(aligned_market)
+    # RSI
+    delta = stock_df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    stock_df['RSI'] = 100 - (100 / (1 + (gain / loss)))
 
-    # 5. Advanced Technical Scoring for the Stock
+    # ADX (Trend Strength)
+    tr = pd.concat([stock_df['High']-stock_df['Low'], 
+                    abs(stock_df['High']-stock_df['Close'].shift()), 
+                    abs(stock_df['Low']-stock_df['Close'].shift())], axis=1).max(axis=1)
+    atr = tr.rolling(window=14).mean()
+    
+    # Calculate DM values
+    plus_dm = stock_df['High'].diff().where(lambda x: (x > 0) & (x > -stock_df['Low'].diff()), 0)
+    minus_dm = (-stock_df['Low'].diff()).where(lambda x: (x > 0) & (x > stock_df['High'].diff()), 0)
+    
+    # Calculate DI values
+    plus_di = 100 * (plus_dm.rolling(14).mean() / atr)
+    minus_di = 100 * (minus_dm.rolling(14).mean() / atr)
+    
+    # Calculate DX and ADX
+    # Avoid division by zero
+    di_sum = plus_di + minus_di
+    dx = 100 * abs(plus_di - minus_di) / di_sum.replace(0, np.nan)
+    stock_df['ADX'] = dx.rolling(window=14).mean()
+
+    # VPT (Volume Price Trend)
+    vpt = (stock_df['Volume'] * stock_df['Close'].pct_change()).cumsum()
+
+    # 2. Advanced Confidence Logic (Weighted)
+    if len(stock_df) < 50: return None # Not enough data
+    
+    latest = stock_df.iloc[-1]
+    
     score = 0
     reasons = []
 
-    # Market & Sector Alignment (Crucial for Low Error)
-    if market_support: 
-        score += 20
-        reasons.append("Market Guardrail: Nifty 50 is Bullish")
-    if sector_support: 
-        score += 20
-        reasons.append(f"Sector Guardrail: {sector_index} is Bullish")
-    
-    # Stock Momentum (RSI + EMA)
-    stock_ema20 = stock_df['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
-    if stock_df['Close'].iloc[-1] > stock_ema20:
+    # EMA Alignment (30% weight) - The Core Trend
+    if latest['Close'] > latest['EMA20'] > latest['EMA50']:
         score += 30
-        reasons.append("Stock Trend: Above EMA20")
+        reasons.append("Bullish Trend: Price > EMA20 > EMA50")
+    elif latest['Close'] > latest['EMA20']:
+        score += 15
+        reasons.append("Short-term Trend: Price > EMA20")
 
-    # Volume Confirmation (VPT)
-    vpt = (stock_df['Volume'] * stock_df['Close'].pct_change()).cumsum()
+    # RSI Momentum (20% weight)
+    if 50 <= latest['RSI'] <= 65:
+        score += 20
+        reasons.append(f"Ideal Momentum: RSI at {round(latest['RSI'],1)}")
+    elif 65 < latest['RSI'] <= 75:
+        score += 10
+        reasons.append("Strong Momentum: RSI Over 65")
+
+    # ADX Strength (20% weight)
+    if latest.get('ADX') and latest['ADX'] > 25:
+        score += 20
+        reasons.append(f"Strong Trend: ADX at {round(latest['ADX'],1)}")
+
+    # Volume Confirmation (30% weight) - Institutional Check
     if len(vpt) >= 2 and vpt.iloc[-1] > vpt.iloc[-2]:
         score += 30
-        reasons.append("Money Flow: Institutional Buying (VPT Up)")
+        reasons.append("Institutional Flow: VPT Rising")
 
-    # 6. Final Calculation
-    latest_price = stock_df['Close'].iloc[-1]
-    confidence = score
+    # 3. Dynamic Levels & Time
+    latest_price = latest['Close']
+    atr_val = atr.iloc[-1]
+    stop_loss = latest_price - (1.5 * atr_val)
+    target_price = latest_price + (3.0 * atr_val)
     
-    signal = ""
-    # Accuracy logic: If market is bearish, cap confidence at 50%
-    if not market_support:
-        confidence = min(confidence, 40)
-        signal = "AVOID (Market Weakness)"
-    else:
-        signal = "STRONG BUY" if confidence >= 80 else "WATCH"
+    # Velocity Time Estimation
+    recent_diffs = stock_df['Close'].diff().tail(20)
+    avg_up = recent_diffs[recent_diffs > 0].mean()
+    velocity = avg_up if avg_up and not np.isnan(avg_up) else (atr_val * 0.5)
+    est_days = round((target_price - latest_price) / velocity) if velocity > 0 else 7
+
+    # Fundamental Rating Logic
+    fund_rating = "⚠️ Neutral"
+    try:
+        if roe is not None and op_margin is not None:
+            # Check Quality First
+            is_quality = roe > 0.15 and op_margin > 0.10
+            
+            if is_quality:
+                # Check Valuation (P/E) if available
+                if pe_ratio and pe_ratio > 60:
+                    fund_rating = "💎 Premium" # Great company, expensive price
+                else:
+                    fund_rating = "✅ Strong"
+            elif roe < 0 or op_margin < 0:
+                fund_rating = "❌ Weak"
+            else:
+                fund_rating = "⚠️ Moderate"
+    except:
+        pass
 
     return {
         "Ticker": ticker_symbol,
-        "Signal": signal,
-        "Confidence Score": f"{confidence}%",
-        "Raw Score": confidence,
-        "Market Correlation": round(correlation, 2),
-        "Reasons": ", ".join(reasons),
-        "Current Price": round(latest_price, 2)
+        "Industry": industry,
+        "Signal": "STRONG BUY" if score >= 80 else "BUY" if score >= 60 else "WATCH",
+        "Confidence Score": score,
+        "Raw Score": score,
+        "Current Price": round(latest_price, 2),
+        "Stop Loss": round(stop_loss, 2),
+        "Target Price": round(target_price, 2),
+        "Est. Days": f"{int(est_days)}-{int(est_days+3)} Days",
+        "Reasoning": ", ".join(reasons),
+        "Market Cap": market_cap,
+        "P/E Ratio": pe_ratio,
+        "P/B Ratio": pb_ratio,
+        "ROE": roe,
+        "Dividend Yield": div_yield,
+        "Operating Margin": op_margin,
+        "Fundamental Rating": fund_rating
     }
 
 def run_pro_scanner(progress_callback=None):
