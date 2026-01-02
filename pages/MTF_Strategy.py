@@ -92,16 +92,25 @@ if st.session_state.scanner_results is not None:
         )
 
         st.subheader("Fundamental Analysis")
+        
+        # Format Market Cap to Lakh Crores just for display
+        df_fund = df.copy()
+        def format_market_cap(val):
+            if pd.isna(val): return "N/A"
+            return f"₹{val / 10**7:,.0f} Cr"
+            
+        df_fund['Market Cap'] = df_fund['Market Cap'].apply(format_market_cap)
+
         st.dataframe(
-            df[['Ticker', 'Fundamental Rating', 'Market Cap', 'P/E Ratio', 'P/B Ratio', 'ROE', 'Dividend Yield', 'Operating Margin']],
+            df_fund[['Ticker', 'Fundamental Rating', 'Market Cap', 'P/E Ratio', 'P/B Ratio', 'ROE', 'Dividend Yield', 'Operating Margin']],
             use_container_width=True,
             column_config={
                 "Ticker": "Stock Symbol",
                 "Fundamental Rating": "Trend",
-                "Market Cap": st.column_config.NumberColumn("Market Cap", format="₹%d"), # Using integer format for large numbers or could use compact
+                "Market Cap": "Market Cap",
                 "P/E Ratio": st.column_config.NumberColumn("P/E", format="%.2f"),
                 "P/B Ratio": st.column_config.NumberColumn("P/B", format="%.2f"),
-                "ROE": st.column_config.NumberColumn("ROE", format="%.2f%%"), # Assuming raw data is like 0.15 or 15, let's assume raw is 0.15 -> percent
+                "ROE": st.column_config.NumberColumn("ROE", format="%.2f%%"), 
                 "Dividend Yield": st.column_config.NumberColumn("Div Yield", format="%.2f%%"),
                 "Operating Margin": st.column_config.NumberColumn("Op Margin", format="%.2f%%"),
             }
