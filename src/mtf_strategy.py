@@ -156,3 +156,89 @@ def run_pro_scanner(progress_callback=None):
             continue
             
     return results, warnings
+
+def run_strategy_backtest(ticker_symbol, sector_index="^NSEBANK", years=1):
+    # 1. Fetch Data for Stock and Sector
+    start_date = (pd.Timestamp.now() - pd.DateOffset(years=years)).strftime('%Y-%m-%d')
+    stock_df = yf.download(ticker_symbol, start=start_date, interval="1d", auto_adjust=True, progress=False)
+    sector_df = yf.download(sector_index, start=start_date, interval="1d", auto_adjust=True, progress=False)
+    
+    # Flatten multi-index columns if they exist
+    if isinstance(stock_df.columns, pd.MultiIndex): stock_df.columns = stock_df.columns.get_level_values(0)
+    if isinstance(sector_df.columns, pd.MultiIndex): sector_df.columns = sector_df.columns.get_level_values(0)
+
+    if stock_df.empty or sector_df.empty:
+        return {"Error": "No data found"}
+
+    # 2. Technical Indicators
+    # Trend
+    stock_df['EMA20'] = stock_df['Close'].ewm(span=20, adjust=False).mean()
+    sector_df['EMA20'] = sector_df['Close'].ewm(span=20, adjust=False).mean()
+    
+    # Volume Price Trend (VPT)
+    stock_df['VPT'] = (stock_df['Volume'] * stock_df['Close'].pct_change()).cumsum()
+    
+    # RSI
+    delta = stock_df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    stock_df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+
+    # Align Sector Data
+    # We need to ensure indices match for vector operations, simpler is to just reindex or use common index
+    # For simplicity assuming trading days match mostly or using what we have
+    common_index = stock_df.index.intersection(sector_df.index)
+    stock_df = stock_df.loc[common_index]
+    sector_df = sector_df.loc[common_index]
+    
+    # 3. Strategy Signals (The 4 Pillars)
+    # Alignment: Stock > EMA and Sector > EMA and VPT rising and RSI in zone
+    stock_df['Signal'] = np.where(
+        (stock_df['Close'] > stock_df['EMA20']) & 
+        (sector_df['Close'] > sector_df['EMA20']) & 
+        (stock_df['VPT'] > stock_df['VPT'].shift(1)) &
+        (stock_df['RSI'] > 50),
+        1, 0
+    )
+
+    # 4. Calculate MTF Net Returns
+    daily_returns = stock_df['Close'].pct_change()
+    
+    # Leveraged Returns (4x)
+    leverage = 4
+    daily_mtf_interest = 0.0004  # 0.04% per day on the borrowed 75%
+    borrowed_capital_weight = 0.75
+    
+    # Strategy Return = (Daily Return * 4) - (Daily Interest * 0.75)
+    stock_df['Strategy_Return'] = (daily_returns * leverage) - (daily_mtf_interest * borrowed_capital_weight)
+    
+    # Only apply returns when Signal is active (using shift to avoid look-ahead bias)
+    # Signal calculated at close of day T is for trade on day T+1
+    stock_df['Actual_Returns'] = stock_df['Strategy_Return'] * stock_df['Signal'].shift(1)
+    
+    # Calculate Cumulative Growth
+    stock_df['Portfolio_Value'] = (1 + stock_df['Actual_Returns'].fillna(0)).cumprod()
+    stock_df['Market_Value'] = (1 + daily_returns.fillna(0)).cumprod()
+
+    # 5. Performance Metrics
+    if stock_df.empty: return {"Error": "Not enough data"}
+    
+    total_return = (stock_df['Portfolio_Value'].iloc[-1] - 1) * 100
+    market_return = (stock_df['Market_Value'].iloc[-1] - 1) * 100
+    
+    # Max Drawdown
+    cum_max = stock_df['Portfolio_Value'].cummax()
+    drawdown = stock_df['Portfolio_Value'] / cum_max - 1
+    max_drawdown = drawdown.min() * 100
+    
+    win_days = len(stock_df[stock_df['Actual_Returns'] > 0])
+    total_trade_days = len(stock_df[stock_df['Signal'] == 1])
+
+    return {
+        "Ticker": ticker_symbol,
+        "Total Return (MTF)": f"{round(total_return, 2)}%",
+        "Buy & Hold Return": f"{round(market_return, 2)}%",
+        "Max Drawdown": f"{round(max_drawdown, 2)}%",
+        "Trade Opportunity Days": total_trade_days,
+        "Daily Win Rate": f"{round((win_days/total_trade_days)*100, 2)}%" if total_trade_days > 0 else "0%"
+    }

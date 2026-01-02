@@ -21,7 +21,7 @@ def add_logo():
             """
             <style>
                 [data-testid="stLogo"] {
-                    height: 5rem !important;
+                    height: 3.5rem !important;
                     width: auto !important;
                 }
             </style>
