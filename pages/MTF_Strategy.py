@@ -14,6 +14,12 @@ This strategy focuses on **high-probability trades** by combining:
 - **Volume Confirmation:** Uses Volume Price Trend (VPT) to detect institutional buying.
 """)
 
+# Initialize session state
+if "scanner_results" not in st.session_state:
+    st.session_state.scanner_results = None
+if "scanner_warnings" not in st.session_state:
+    st.session_state.scanner_warnings = []
+
 if st.button("🚀 Run Ultra-Precision Scanner"):
     progress_bar = st.progress(0, text="Starting scanner...")
     
@@ -23,10 +29,17 @@ if st.button("🚀 Run Ultra-Precision Scanner"):
     results, warnings = run_pro_scanner(progress_callback=update_progress)
     progress_bar.empty()
     
-    # Display warnings
-    for warn in warnings:
+    # Store in session state
+    st.session_state.scanner_results = results
+    st.session_state.scanner_warnings = warnings
+
+# Display results if they exist in session state
+if st.session_state.scanner_warnings:
+    for warn in st.session_state.scanner_warnings:
         st.warning(warn)
-        
+
+if st.session_state.scanner_results is not None:
+    results = st.session_state.scanner_results
     if not results:
         st.info("No data returned or scanner failed.")
     else:
