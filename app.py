@@ -5,6 +5,8 @@ from src.data_loader import fetch_stock_data
 from src.analysis import calculate_statistics, calculate_technical_indicators
 
 st.set_page_config(page_title="Stock Analysis & Prediction", layout="wide")
+from src.ui import add_logo
+add_logo()
 
 st.title("Stock Analysis & Prediction Dashboard")
 
