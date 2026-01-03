@@ -214,7 +214,7 @@ def run_pro_scanner(progress_callback=None):
             results.append(analysis)
             
             # Collect High Confidence Signals
-            if analysis["Signal"] in ["BUY", "STRONG BUY"] and analysis["Confidence Score"] >= 60:
+            if analysis["Signal"] in ["BUY", "STRONG BUY"] and analysis["Confidence Score"] >= 80
                 valid_signals.append(analysis)
                 
         except Exception as e:
