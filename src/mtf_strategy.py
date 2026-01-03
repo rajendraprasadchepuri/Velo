@@ -30,14 +30,9 @@ WATCHLIST = [
 ]
 """WATCHLIST = [
     # NIFTY 50
-    "ADANIENT.NS","ADANIPORTS.NS","APOLLOHOSP.NS","ASIANPAINT.NS","AXISBANK.NS",
-    "BAJAJ-AUTO.NS","BHARATFORG.NS","BIOCON.NS","CANFINHOME.NS","CHOLAFIN.NS","COFORGE.NS",
-    "CONCOR.NS","CUMMINSIND.NS","DIXON.NS","FEDERALBNK.NS","GODREJPROP.NS",
-    "HDFCAMC.NS","HINDPETRO.NS","IDFCFIRSTB.NS","IGL.NS","INDUSTOWER.NS",
-    "JINDALSTEL.NS","LTTS.NS","LUPIN.NS","MARICO.NS","MINDTREE.NS",
-    "MOTHERSON.NS","MPHASIS.NS","MRF.NS","MUTHOOTFIN.NS","NAM-INDIA.NS"]
+    "TATASTEEL.NS","TCS.NS","TECHM.NS","TITAN.NS",
+    "ULTRACEMCO.NS","UPL.NS","WIPRO.NS"]
 """
-
 
 def get_ultra_precision_signal(ticker_symbol):
     try:
@@ -139,13 +134,24 @@ def get_ultra_precision_signal(ticker_symbol):
     # --- 3. Dynamic Levels & Time Estimation ---
     latest_price = latest['Close']
     atr_val = atr.iloc[-1]
-    stop_loss = latest_price - (1.5 * atr_val)
-    target_price = latest_price + (3.0 * atr_val)
+
+    # Define Entry Point (If price is too far from EMA20, suggest a limit order)
+    ema20_val = latest['EMA20']
+    if latest_price > ema20_val * 1.02: # More than 2% above EMA20
+        entry_point = ema20_val * 1.01  # Limit Order: Wait for 1% above EMA20
+        entry_type = "LIMIT (Pullback)"
+    else:
+        entry_point = latest_price
+        entry_type = "MARKET"
+
+
+    stop_loss = entry_point - (1.5 * atr_val)
+    target_price = entry_point + (3.0 * atr_val)
     
     recent_diffs = stock_df['Close'].diff().tail(20)
     avg_up = recent_diffs[recent_diffs > 0].mean()
     velocity = avg_up if pd.notnull(avg_up) and avg_up > 0 else (atr_val * 0.5)
-    est_days = round((target_price - latest_price) / velocity) if velocity > 0 else 7
+    est_days = round((target_price - entry_point) / velocity) if velocity > 0 else 7
 
     # Fundamental Rating Logic
     fund_rating = "⚠️ Neutral"
@@ -166,7 +172,7 @@ def get_ultra_precision_signal(ticker_symbol):
         "Confidence Score": score,
         "Raw Score": score,
         "Current Price": round(latest_price, 2),
-        "Entry Price": round(latest_price, 2),
+        "Entry Price": round(entry_point, 2),
         "Stop Loss": round(stop_loss, 2),
         "Target Price": round(target_price, 2),
         "Est. Days": f"{max(1, int(est_days))}-{max(1, int(est_days+3))} Days",
