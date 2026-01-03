@@ -166,6 +166,7 @@ def get_ultra_precision_signal(ticker_symbol):
         "Confidence Score": score,
         "Raw Score": score,
         "Current Price": round(latest_price, 2),
+        "Entry Price": round(latest_price, 2),
         "Stop Loss": round(stop_loss, 2),
         "Target Price": round(target_price, 2),
         "Est. Days": f"{max(1, int(est_days))}-{max(1, int(est_days+3))} Days",

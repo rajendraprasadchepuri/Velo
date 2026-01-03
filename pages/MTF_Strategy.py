@@ -72,7 +72,7 @@ if st.session_state.scanner_results is not None:
 
         # Display Dataframe with style
         st.dataframe(
-            df[['Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
+            df[['Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Entry Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
             use_container_width=True,
             column_config={
                 "Ticker": "Stock Symbol",
@@ -86,6 +86,7 @@ if st.session_state.scanner_results is not None:
                     max_value=100,
                 ),
                 "Current Price": st.column_config.NumberColumn(format="₹%.2f"),
+                "Entry Price": st.column_config.NumberColumn(format="₹%.2f"),
                 "Stop Loss": st.column_config.NumberColumn(format="₹%.2f"),
                 "Target Price": st.column_config.NumberColumn(format="₹%.2f"),
                 "Est. Days": "Timeframe",

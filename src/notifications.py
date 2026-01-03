@@ -12,7 +12,7 @@ def send_summary_email(signals):
     password = "eojxtohufkoxlqnp"
     receivers = [
     "rajendraprasadchepuri@gmail.com",
-    "gprasannakumar798@gmail.com"
+    #"gprasannakumar798@gmail.com"
 ]
     
     date_str = datetime.now().strftime("%Y-%m-%d")
