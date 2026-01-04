@@ -47,11 +47,10 @@ if st.session_state.scanner_results is not None:
     else:
         df = pd.DataFrame(results)
         
+        # Filter for high confidence only
+        df = df[df['Confidence Score'] >= 0]
         # Sort by Raw Score desc
         df = df.sort_values(by="Raw Score", ascending=False)
-        
-        # Filter for high confidence only
-        df = df[df['Confidence Score'] >= 80]
         
         # Display Summary Metrics
         total_scanned = len(results)
