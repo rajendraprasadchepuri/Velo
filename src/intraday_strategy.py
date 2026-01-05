@@ -7,38 +7,7 @@ from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 
 # --- HIGH OCTANE INTRADAY LIST (High Beta + High Liquidity) ---
-WATCHLIST = [
-    # 1. FINANCE & BANKS (The Engine of Nifty)
-    "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", 
-    "INDUSINDBK.NS", "BANKBARODA.NS", "CANBK.NS", "PNB.NS", "FEDERALBNK.NS", 
-    "BAJFINANCE.NS", "BAJAJFINSV.NS", "CHOLAFIN.NS", "SHRIRAMFIN.NS",
-
-    # 2. AUTO (Trending)
-    "TATAMOTORS.NS", "M&M.NS", "MARUTI.NS", "BAJAJ-AUTO.NS", "TVSMOTOR.NS", 
-    "EICHERMOT.NS", "HEROMOTOCO.NS", "ASHOKLEY.NS", "BHARATFORG.NS",
-
-    # 3. METALS (High Volatility)
-    "TATASTEEL.NS", "JINDALSTEL.NS", "HINDALCO.NS", "JSWSTEEL.NS", "VEDL.NS", 
-    "NMDC.NS", "SAIL.NS", "NATIONALUM.NS",
-
-    # 4. ENERGY & ADANI (Big Moves)
-    "RELIANCE.NS", "ADANIENT.NS", "ADANIPORTS.NS", "ADANIPOWER.NS", "ADANIGREEN.NS", 
-    "TATAPOWER.NS", "NTPC.NS", "POWERGRID.NS", "COALINDIA.NS", "ONGC.NS",
-
-    # 5. DEFENSE, INFRA & REALTY (Momentum Sectors)
-    "HAL.NS", "BEL.NS", "MAZDOCK.NS", "COCHINSHIP.NS", # Defense
-    "ABB.NS", "SIEMENS.NS", "LT.NS", # Capital Goods
-    "DLF.NS", "GODREJPROP.NS", "OBEROIRLTY.NS", # Realty
-    "IRCTC.NS", "RVNL.NS", # Railways
-
-    # 6. IT LEADERS (For Direction)
-    "TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS", 
-    "LTIM.NS", "COFORGE.NS", "PERSISTENT.NS",
-
-    # 7. HIGH MOMENTUM OTHERS
-    "TRENT.NS", "ZOMATO.NS", "NAUKRI.NS", "INDIGO.NS", "TITAN.NS", 
-    "POLYCAB.NS", "DIXON.NS", "VOLTAS.NS", "HAVELLS.NS", "SRF.NS"
-]
+from src.config import WATCHLIST
 
 def get_vsa_signal(df):
     """Calculates Effort vs Result (VSA) logic"""

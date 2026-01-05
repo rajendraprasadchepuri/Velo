@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time, timedelta
-from src.intraday_strategy import WATCHLIST, calculate_confidence
+from src.intraday_strategy import calculate_confidence
+from src.config import WATCHLIST
 
 st.set_page_config(page_title="Intraday Analysis", layout="wide")
 st.title("Intraday Confidence Score")

@@ -1,7 +1,8 @@
 import pandas as pd
 from datetime import datetime
-from src.intraday_strategy import WATCHLIST, calculate_confidence
+from src.intraday_strategy import calculate_confidence
 from src.tracker import TradeTracker
+from src.config import WATCHLIST
 import colorama
 from colorama import Fore, Style
 
