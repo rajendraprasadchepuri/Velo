@@ -1,120 +1,69 @@
-# Stock Analysis & Prediction App
+# Velo Trading System
 
-A comprehensive application for analyzing stock market data, sentiment from news, forecasting future prices, and discovering high-probability trades using advanced strategies.
+Velo is a professional-grade trading analysis and tracking system built for Indian Stock Market (NSE). It combines technical analysis, automated scanning, and live trade tracking for both Swing (MTF) and Intraday strategies.
 
 ## 🚀 Key Features
 
-### 1. Ultra-Precision MTF Strategy (New!)
-A specialized scanner designed for **Margin Trading Facility (MTF)** and high-conviction swing trades.
-*   **Four-Pillar Technical Logic**:
-    *   **Trend**: Price > EMA20 > EMA50 (Bullish Alignment).
-    *   **Momentum**: RSI between 50-75 (Sweet spot).
-    *   **Strength**: ADX > 25 (Strong Trend).
-    *   **Volume**: Rising Volume Price Trend (VPT) indicating institutional flow.
-*   **Fundamental Guardrails**:
-    *   **Real-time Metrics**: Market Cap, P/E, ROE, Operating Margins.
-    *   **Smart Ratings**:
-        *   ✅ **Strong**: Profitable (ROE > 15%, Margin > 10%) & Reasonable Price.
-        *   💎 **Premium**: Great Fundamentals but Expensive (P/E > 60).
-        *   ❌ **Weak**: Weak Fundamentals.
-*   **Dynamic Risk Management**:
-    *   **Stop Loss**: Calculated using 1.5x ATR.
-    *   **Targets**: Calculated using 3.0x ATR.
-    *   **Timeframe**: Velocity-based time estimation for targets.
+### 1. Live Trade Tracker
+*   **Real-time Monitoring**: Tracks your open trades against live market data.
+*   **Smart Status**: Detects `TARGET_HIT`, `STOP_LOSS_HIT`, `WAITING_ENTRY`, and `EXIT_AT_CLOSE`.
+*   **Persistence**: Automatically saves all trade history to `data/live_trades.csv`.
+*   **Performance Dashboard**: View PnL and trade history in the "Live Performance" page.
 
-### 2. Advanced Predictions & ML
-*   **Ensemble Models**: Random Forest & XGBoost incorporating sentiment analysis.
-*   **Forecasting**: Facebook Prophet & ARIMA for time-series projections.
-*   **Sentiment Analysis**: Natural Language Processing (TextBlob) on news headlines to gauge market mood.
+### 2. Intraday Strategy (High Octane)
+*   **High-Beta Watchlist**: Scans ~75 high-momentum stocks (Banks, Auto, Adani, Defense) for maximum daily range.
+*   **Logic**: Uses EMA, VWAP, RSI, VSA (Volume Spread Analysis), and Sector Momentum to score setups.
+*   **Smart Planning**:
+    *   **Pre-Market**: Runs specifically for "Today".
+    *   **Post-Market**: Auto-defaults to "Tomorrow" for planning ahead.
+    *   **Granular Tracking**: Uses 5-minute data to validate entries (Must strictly cross entry price).
+    *   **Auto-Expiry**: Trades not triggered by 3:30 PM are marked `NOT_TRIGGERED`. Open trades are squared off as `EXIT_AT_CLOSE`.
 
-### 3. Interactive Analysis
-*   **Real-time Data**: Live data for NSE/BSE stocks via `yfinance`.
-*   **Interactive Charts**: Zoomable Plotly charts with SMA, EMA, and bands.
-*   **Backtesting**: Built-in engine to test strategy performance on historical data.
+### 3. MTF / Swing Strategy
+*   **Daily Timeframe**: Analyzes daily candles for multi-day trends.
+*   **Quality Watchlist**: Focuses on Nifty 50 and key Sector Leaders for stability.
+*   **Safety First**: Prioritizes Stop Loss safety in volatile conditions.
 
----
-
-## 🛠️ Tech Stack
-
-*   **Frontend**: Streamlit
-*   **Data Processing**: Pandas, NumPy
-*   **Visualization**: Plotly Express
-*   **Machine Learning**: Scikit-learn, XGBoost, Prophet, Statsmodels
-*   **Finance Data**: yfinance
-*   **Sentiment Analysis**: TextBlob
-
----
-
-## 📦 Installation
-
-### Prerequisites
-
-*   Python 3.8 or higher
-*   Git
-
-### Setup
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd stock-prediction-app
-    ```
-
-2.  **Create and activate a virtual environment:**
-    *   **Windows:**
-        ```powershell
-        python -m venv .venv
-        .\.venv\Scripts\activate
-        ```
-    *   **macOS/Linux:**
-        ```bash
-        python3 -m venv .venv
-        source .venv/bin/activate
-        ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
----
-
-## 🚀 Usage
-
-### Running the App
-Run the following command in your terminal:
-
-```bash
-streamlit run app.py
-```
-
-Navigate to the **MTF Strategy** page from the sidebar to use the new scanner.
+### 4. Automation 🤖
+*   **One-Click Scan**: Double-click `run_intraday_scan.bat` to run the Intraday analysis instantly.
+*   **Task Scheduler Ready**: Can be scheduled to run automatically at 9:45 AM daily.
+*   **Auto-Add**: Automatically adds high-confidence (>90 Score) trades to your tracker.
 
 ---
 
 ## 📂 Project Structure
 
-```
-.
-├── src/
-│   ├── data_loader.py    # standard data fetching
-│   ├── mtf_strategy.py   # Advanced logic for MTF Scanner & Backtesting
-│   ├── analysis.py       # Technical indicators
-│   ├── model.py          # ML Training logic
-│   └── sentiment.py      # News sentiment
-├── pages/
-│   └── MTF_Strategy.py   # UI for the MTF Scanner
-├── app.py                # Main Dashboard
-├── requirements.txt      # Dependencies
-└── README.md             # Documentation
-```
+*   `Hello.py`: Main Streamlit Dashboard.
+*   `pages/`:
+    *   `Intraday.py`: Manual Intraday Scanner UI.
+    *   `MTF_Strategy.py`: Swing Trading Scanner UI.
+    *   `Live_Performance.py`: Dashboard for tracking active trades.
+*   `src/`:
+    *   `tracker.py`: Core trade tracking engine.
+    *   `intraday_strategy.py`: Shared logic and watchlist for Intraday.
+    *   `mtf_strategy.py`: Logic for Swing trading.
+*   `auto_run_intraday.py`: Python script for automated scanning.
+*   `run_intraday_scan.bat`: Batch file for easy execution.
 
 ---
 
-## ⚠️ Disclaimer
+## 🛠️ How to Use
 
-This application is for educational and internal purposes only. It is **not financial advice**. Algorithmic predictions and scanners can be wrong. Always do your own due diligence before investing.
+### Manual Workflow
+1.  Run the app: `streamlit run Hello.py`
+2.  Go to **Intraday** or **MTF Strategy** page.
+3.  Click "Calculate Scores".
+4.  Review the table. High confidence trades are highlighted.
+5.  Click **"Add to Live Tracker"**.
+6.  Monitor progress in **Live Performance** page.
 
-### Contact
-*   **Prasanna**: +91 88519 24366
-*   **Rajendra Prasad**: +91 96762 60340
+### Automated Workflow (Intraday)
+1.  **Schedule**: Set Windows Task Scheduler to run `run_intraday_scan.bat` at **09:45 AM**.
+2.  **Forget**: The system will scan, filter, and add trades to your tracker automatically.
+3.  **Review**: Check the "Live Performance" page at 10:00 AM to see your active/pending trades.
+
+---
+
+## ⚙️ Configuration
+*   **Watchlists**: Defined in `src/intraday_strategy.py` (Intraday) and `src/mtf_strategy.py` (Swing).
+*   **Data**: All trade data is stored in `data/live_trades.csv`. You can back this up manually if needed.

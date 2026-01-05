@@ -36,17 +36,43 @@ class TradeTracker:
     def save_trades(self, df):
         df.to_csv(self.filepath, index=False)
 
-    def add_trade(self, signal_data, strategy_type="MTF"):
+    def add_trade(self, signal_data, strategy_type="MTF", signal_date=None):
         df = self.load_trades()
         
         # Check if trade already exists for this ticker on this date to prevent duplicates
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        if signal_date:
+            date_str = signal_date
+        else:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+        
         ticker = signal_data.get('Ticker')
         
         # Avoid duplicate entries for same day and strategy
         existing = df[(df['Ticker'] == ticker) & (df['SignalDate'] == date_str) & (df['Strategy'] == strategy_type)]
+        
+        # New Logic: Allow updating pending trades
         if not existing.empty:
-            return False, "Trade already exists for today."
+            existing_index = existing.index[0]
+            current_status = df.at[existing_index, 'Status']
+            
+            if current_status == 'WAITING_ENTRY':
+                # Update existing trade with refined numbers
+                df.at[existing_index, 'EntryPrice'] = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', 0))))
+                
+                # Update SL/Target
+                sl = signal_data.get('Stop Loss')
+                if sl is None: sl = df.at[existing_index, 'EntryPrice'] * 0.995
+                target = signal_data.get('Target Price')
+                if target is None: target = df.at[existing_index, 'EntryPrice'] * 1.005
+                
+                df.at[existing_index, 'StopLoss'] = float(sl)
+                df.at[existing_index, 'TargetPrice'] = float(target)
+                df.at[existing_index, 'Notes'] = signal_data.get('Signal', 'Manual') + " (Updated)"
+                
+                self.save_trades(df)
+                return True, "Trade updated with latest analysis."
+            else:
+                return False, f"Trade already active ({current_status}). Cannot overwrite."
 
         # Parse Entry Price
         entry_price = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', 0))))
