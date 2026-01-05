@@ -10,8 +10,11 @@ st.title("Intraday Confidence Score")
 if "intraday_results" not in st.session_state:
     st.session_state.intraday_results = None
 
+import pytz
+
 # --- SMART DATE LOGIC ---
-now = datetime.now()
+ist = pytz.timezone('Asia/Kolkata')
+now = datetime.now(ist)
 target_date = now
 session_label = "Today's Session"
 
