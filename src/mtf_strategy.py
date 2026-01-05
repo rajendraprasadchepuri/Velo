@@ -29,10 +29,10 @@ WATCHLIST = [
     "TATAPOWER.NS","TORNTPHARM.NS","TVSMOTOR.NS","UBL.NS","VOLTAS.NS",
     "WHIRLPOOL.NS","ZEEL.NS"
 ]
-WATCHLIST = [
+"""WATCHLIST = [
     # NIFTY 50
     "TATASTEEL.NS","TCS.NS","TECHM.NS","TITAN.NS",
-    "ULTRACEMCO.NS","UPL.NS","WIPRO.NS"]
+    "ULTRACEMCO.NS","UPL.NS","WIPRO.NS"]"""
 
 def get_ultra_precision_signal(ticker_symbol):
     try:
