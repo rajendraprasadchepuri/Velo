@@ -49,6 +49,9 @@ else:
         if val == 'TARGET_HIT': color = 'green'
         elif val == 'STOP_LOSS_HIT': color = 'red'
         elif val == 'OPEN': color = 'blue'
+        elif val == 'WAITING_ENTRY': color = 'orange'
+        elif val == 'NOT_TRIGGERED': color = 'grey'
+        elif val == 'EXIT_AT_CLOSE': color = 'purple'
         return f'color: {color}; font-weight: bold'
 
     tab1, tab2 = st.tabs(["MTF Strategy", "Intraday Strategy"])
