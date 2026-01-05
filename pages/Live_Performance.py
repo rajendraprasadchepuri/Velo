@@ -81,7 +81,12 @@ else:
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
                 "ExitPrice": st.column_config.NumberColumn("Exit Price", format="₹%.2f"),
                 "PnL": st.column_config.NumberColumn("PnL %", format="%.2f%%"),
-                "Strategy": None # Hide strategy column as it's redundant here
+                "Strategy": None, # Hide strategy column as it's redundant here
+                "UpdatedStopLoss": None,
+                "ATR": None,
+                "TriggerHigh": None,
+                "VWAP": None,
+                "InitialSL": None
             }
         )
 
@@ -109,11 +114,31 @@ else:
             
             if 'ExitPrice' in df_intra.columns and 'EntryPrice' in df_intra.columns:
                 df_intra['PnL'] = df_intra.apply(calc_pnl, axis=1)
+            # Calculate % Differences for Display
+            if 'EntryPrice' in df_intra.columns and 'StopLoss' in df_intra.columns:
+                df_intra['SL %'] = ((df_intra['EntryPrice'] - df_intra['StopLoss']).abs() / df_intra['EntryPrice']) * 100
+            
+            if 'EntryPrice' in df_intra.columns and 'TargetPrice' in df_intra.columns:
+                df_intra['Target %'] = ((df_intra['TargetPrice'] - df_intra['EntryPrice']).abs() / df_intra['EntryPrice']) * 100
+
+            # Calculate Risk and Rec Qty
+            if 'EntryPrice' in df_intra.columns and 'StopLoss' in df_intra.columns:
+                 # Risk Per Share
+                 df_intra['Risk'] = (df_intra['EntryPrice'] - df_intra['StopLoss']).abs()
+                 
+                 # Recommended Quantity for 1 Lakh Capital (1% Risk = 1000 INR)
+                 # Qty = 1000 / Risk Per Share
+                 def calc_qty(risk):
+                     if risk > 0:
+                         return int(1000 / risk)
+                     return 0
+                 
+                 df_intra['Qty (1L)'] = df_intra['Risk'].apply(calc_qty)
 
         st.dataframe(
             df_intra,
             use_container_width=True,
-            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "UpdatedStopLoss", "TargetPrice", "ExitPrice", "ExitDate", "PnL", "Notes"],
+            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "SL %", "Risk", "Qty (1L)", "UpdatedStopLoss", "TargetPrice", "Target %", "ExitPrice", "ExitDate", "PnL", "Notes"],
             column_config={
                 "TradeID": "ID",
                 "Ticker": "Symbol",
@@ -121,8 +146,12 @@ else:
                 "EntryDate": "Entry Time",
                 "EntryPrice": st.column_config.NumberColumn("Entry", format="₹%.2f"),
                 "StopLoss": st.column_config.NumberColumn("SL", format="₹%.2f"),
+                "SL %": st.column_config.NumberColumn("SL %", format="%.2f%%"),
+                "Risk": st.column_config.NumberColumn("Risk/Share", format="₹%.2f"),
+                "Qty (1L)": st.column_config.NumberColumn("Qty (1L Cap)", format="%d"),
                 "UpdatedStopLoss": st.column_config.NumberColumn("Updated SL", format="₹%.2f"),
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
+                "Target %": st.column_config.NumberColumn("Tgt %", format="%.2f%%"),
                 "ExitPrice": st.column_config.NumberColumn("Exit Price", format="₹%.2f"),
                 "ExitDate": "Exit Time",
                 "PnL": st.column_config.NumberColumn("PnL %", format="%.2f%%"),

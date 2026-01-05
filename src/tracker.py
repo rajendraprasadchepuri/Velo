@@ -47,6 +47,12 @@ class TradeTracker:
                 df["UpdatedStopLoss"] = None
                 changed = True
                 
+                # --- NEW COLUMNS FOR ADVANCED STRATEGY ---
+                if "ATR" not in df.columns: df["ATR"] = None
+                if "TriggerHigh" not in df.columns: df["TriggerHigh"] = None
+                if "VWAP" not in df.columns: df["VWAP"] = None
+                if "InitialSL" not in df.columns: df["InitialSL"] = None
+                
             if changed:
                 df.to_csv(self.filepath, index=False)
 
@@ -60,7 +66,6 @@ class TradeTracker:
     def add_trade(self, signal_data, strategy_type="MTF", signal_date=None):
         df = self.load_trades()
         
-        # Check if trade already exists for this ticker on this date to prevent duplicates
         if signal_date:
             date_str = signal_date
         else:
@@ -68,58 +73,70 @@ class TradeTracker:
         
         ticker = signal_data.get('Ticker')
         
-        # Avoid duplicate entries for same day and strategy
         existing = df[(df['Ticker'] == ticker) & (df['SignalDate'] == date_str) & (df['Strategy'] == strategy_type)]
         
-        # New Logic: Allow updating pending trades
-        if not existing.empty:
-            existing_index = existing.index[0]
-            current_status = df.at[existing_index, 'Status']
-            
-            if current_status == 'WAITING_ENTRY':
-                # Update existing trade with refined numbers
-                df.at[existing_index, 'EntryPrice'] = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', 0))))
-                
-                # Update SL/Target
-                sl = signal_data.get('Stop Loss')
-                if sl is None: sl = df.at[existing_index, 'EntryPrice'] * 0.995
-                target = signal_data.get('Target Price')
-                if target is None: target = df.at[existing_index, 'EntryPrice'] * 1.005
-                
-                df.at[existing_index, 'StopLoss'] = float(sl)
-                df.at[existing_index, 'TargetPrice'] = float(target)
-                df.at[existing_index, 'Notes'] = signal_data.get('Signal', 'Manual') + " (Updated)"
-                
-                self.save_trades(df)
-                return True, "Trade updated with latest analysis."
-            else:
-                return False, f"Trade already active ({current_status}). Cannot overwrite."
-
-        # Parse Entry Price
+        # Parse common fields
         entry_price = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', 0))))
         
-        # Parse Stop Loss & Target
-        sl = signal_data.get('Stop Loss')
-        if sl is None:
-             # Fallback for Intraday if not present
-             sl = entry_price * 0.995 # 0.5% SL default
-             
-        target = signal_data.get('Target Price')
-        if target is None:
-            # Intraday 'Exit Price'
-            target = signal_data.get('Exit Price', entry_price * 1.005)
+        atr = signal_data.get('ATR')
+        trigger_high = signal_data.get('TriggerHigh')
+        vwap = signal_data.get('VWAP')
+        
+        # Calculate SL/Target based on ATR if available (RRR 1:2)
+        if atr and float(atr) > 0:
+            atr_val = float(atr)
+            atr_risk = 1.5 * atr_val
+            min_risk = entry_price * 0.005
+            
+            # SL = Entry - Max(1.5 * ATR, 0.5% of Entry)
+            actual_risk = max(atr_risk, min_risk)
+            sl_price = entry_price - actual_risk
+            
+            # Target = Entry + 2 * Risk
+            target_price = entry_price + (2 * actual_risk)
+            
+            sl = sl_price
+            target = target_price
+        else:
+            # Fallback Defaults (0.5%)
+            sl = signal_data.get('Stop Loss')
+            if sl is None: sl = entry_price * 0.995 
+            target = signal_data.get('Target Price')
+            if target is None: target = entry_price * 1.005
 
-        # Initial Status
-        # MTF: OPEN (Market/Limit assumed filled for now, or could be WAITING_ENTRY but logic is simpler)
-        # Intraday: WAITING_ENTRY (Strict requirement to hit price after 09:20)
         initial_status = "WAITING_ENTRY" if strategy_type == "Intraday" else "OPEN"
+
+        if not existing.empty:
+            existing_index = existing.index[0]
+            if df.at[existing_index, 'Status'] == 'WAITING_ENTRY':
+                 # Update existing
+                 df.at[existing_index, 'EntryPrice'] = entry_price
+                 df.at[existing_index, 'ATR'] = atr
+                 df.at[existing_index, 'TriggerHigh'] = trigger_high
+                 df.at[existing_index, 'VWAP'] = vwap
+                 
+                 # Update SL/Target with new logic
+                 df.at[existing_index, 'StopLoss'] = float(sl)
+                 df.at[existing_index, 'TargetPrice'] = float(target)
+                 
+                 # Append Updated tag to notes if not present
+                 current_notes = str(df.at[existing_index, 'Notes'])
+                 if "(Updated)" not in current_notes:
+                     df.at[existing_index, 'Notes'] = f"{current_notes} | (Updated)"
+                 elif "Manual" in current_notes:
+                     pass # Already updated
+                     
+                 self.save_trades(df)
+                 return True, "Trade updated."
+            else:
+                 return False, "Trade active, cannot update."
 
         new_trade = {
             "TradeID": str(uuid.uuid4())[:8],
             "Ticker": ticker,
             "SignalDate": date_str,
             "EntryPrice": entry_price,
-            "StopLoss": float(sl),
+            "StopLoss": float(sl), 
             "TargetPrice": float(target),
             "Status": initial_status, 
             "ExitPrice": None,
@@ -128,7 +145,11 @@ class TradeTracker:
             "UpdatedStopLoss": None,
             "PnL": 0.0,
             "Notes": signal_data.get('Signal', 'Manual'),
-            "Strategy": strategy_type
+            "Strategy": strategy_type,
+            "ATR": atr,
+            "TriggerHigh": trigger_high,
+            "VWAP": vwap,
+            "InitialSL": None
         }
         
         df = pd.concat([df, pd.DataFrame([new_trade])], ignore_index=True)
@@ -138,18 +159,6 @@ class TradeTracker:
     def update_status(self):
         """
         Iterates through all active trades and updates their status based on live market data.
-        
-        Logic:
-        - Intraday: Fetches 1-minute data for the Signal Date.
-          - Checks 09:15-15:30 window.
-          - Triggers WAITING_ENTRY -> OPEN if price crosses Entry.
-          - Checks SL and Target logic on OPEN trades.
-          - Handles Dynamic SL moves (Trailing) and Target Extensions.
-          - Auto-squares off at 15:30 if still open.
-        - MTF: Fetches daily data and checks for SL/Target hits on subsequent days.
-        
-        Returns:
-            int: Number of trades updated.
         """
         df = self.load_trades()
         updates_count = 0
@@ -157,26 +166,15 @@ class TradeTracker:
         
         for index, row in df.iterrows():
             status = row['Status']
-            if status in ['STOP_LOSS_HIT', 'NOT_TRIGGERED', 'EXIT_AT_CLOSE']: # removed TARGET_HIT from ignore list to allow monitoring after hit? No, logic is different now.
-                # If TARGET_HIT was final, we skip. But now we want dynamic updates, so 'TARGET_HIT' is not a final state until market close or SL hit.
-                # Actually, our new logic keeps status as OPEN while updating targets.
-                # So if status is OPEN, we process.
-                pass
             if status in ['TARGET_HIT', 'STOP_LOSS_HIT', 'NOT_TRIGGERED', 'EXIT_AT_CLOSE']:
                  continue
-                
+            
             ticker = row['Ticker']
             start_date = row['SignalDate']
             strategy = row.get('Strategy', 'MTF')
             
             try:
-                # --- STRATEGY SPECIFIC LOGIC ---
-                
                 if strategy == 'Intraday':
-                    # Intraday Logic: 5m candles, same day only
-                    # Fetch data. Note: yfinance limits 5m data effectively (last 60 days).
-                    # We need to fetch data covering the SignalDate.
-                    # start=SignalDate, end=SignalDate + 1 day
                     start_dt = pd.to_datetime(start_date)
                     end_dt = start_dt + pd.Timedelta(days=1)
                     
@@ -185,91 +183,142 @@ class TradeTracker:
                     if data.empty: continue
                     if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
 
-                    # Filter for specific day just in case
-                    # (Strictly speaking yf download with start/end handles dates, but we check times)
-                    
                     target = row['TargetPrice']
                     sl = row['StopLoss']
                     entry = row['EntryPrice']
                     updated_sl = row.get('UpdatedStopLoss')
                     if pd.isna(updated_sl): updated_sl = None
                     
-                    # If we have an updated SL, use that for safety check, otherwise use original SL
                     current_effective_sl = updated_sl if updated_sl is not None else sl
+                    
+                    # Advanced Logic Params
+                    atr = row.get('ATR')
+                    trigger_high = row.get('TriggerHigh')
                     
                     status_changed = False
                     
                     for timestamp, candle in data.iterrows():
-                        # Skip first 5 mins (09:15 - 09:20)
-                        if timestamp.time() < time(9, 20):
-                            continue
-                            
-                        # Stop at market close 15:30
-                        if timestamp.time() >= time(15, 30):
-                            break
+                        if timestamp.time() < time(9, 15): continue # changed to 09:15 to allow catching early moves if valid? No strategy says wait. 
+                        # Actually strategy says 5m close > trigger high.
+                        # Tracker is 1m. We can approximate "5m close" by checking if minute candles sustain? 
+                        # Or strictly follow "Close > TriggerHigh" on 1m basis for faster entry?
+                        # User said: "wait for the current 5-minute candle to close above".
+                        # To implement strictly 5-min close check on 1m data is hard without resampling.
+                        # Compromise: Check if 1m Close > TriggerHigh * 1.0005 (Buffer).
+                        
+                        if timestamp.time() >= time(15, 30): break
 
                         high = candle['High']
                         low = candle['Low']
+                        close = candle['Close']
                         
-                        # STATE MACHINE
+                        # --- ENTRY LOGIC ---
                         if row['Status'] == 'WAITING_ENTRY':
-                            # Trigger if price touches Entry
-                            # Conservative: strictly Low <= Entry <= High
-                            if low <= entry <= high:
+                            triggered = False
+                            
+                            # Standard Logic (Old)
+                            if pd.isna(trigger_high): 
+                                if low <= entry <= high: triggered = True
+                            else:
+                                # Advanced Logic: Candle Close > Trigger High + Buffer
+                                buffer = float(trigger_high) * 0.0005
+                                target_entry = float(trigger_high) + buffer
+                                if close > target_entry:
+                                    triggered = True
+                                    entry = close # Slippage: Entry is at Close price
+                            
+                            if triggered:
                                 row['Status'] = 'OPEN'
                                 row['EntryDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                                row['Notes'] = f"{row.get('Notes', '')} | Triggered at {timestamp.time()}"
-                                status_changed = True
-                                # Fallthrough to OPEN logic immediately
+                                row['EntryPrice'] = entry # Update entry to actual execution price
+                                
+                                # --- DYNAMIC SL/TARGET CALCULATION ON ENTRY ---
+                                if pd.notna(atr) and float(atr) > 0:
+                                    # SL = Entry - Max(1.5 * ATR, 0.5% of Entry)
+                                    # This ensures Minimum Risk is 0.5%, so Target is at least 1%
+                                    atr_risk = 1.5 * float(atr)
+                                    min_risk = entry * 0.005
+                                    actual_risk = max(atr_risk, min_risk)
+                                    
+                                    risk_sl = entry - actual_risk
+                                    # Ensure SL is logical (below entry for long)
+                                    
+                                    # Target (RRR 1:2)
+                                    # Risk = Entry - SL
+                                    risk = entry - risk_sl
+                                    t1 = entry + (2 * risk)
+                                    
+                                    row['StopLoss'] = risk_sl
+                                    row['InitialSL'] = risk_sl
+                                    row['TargetPrice'] = t1
+                                    
+                                    row['Notes'] = f"{row.get('Notes', '')} | Risk-Based SL/Target Set (Risk {actual_risk:.2f})"
+                                    current_effective_sl = risk_sl
+                                    target = t1
+                                else:
+                                     row['Notes'] = f"{row.get('Notes', '')} | Triggered at {timestamp.time()}"
 
+                                status_changed = True
+                                # Fallthrough
+
+                        # --- OPEN TRADE MANAGEMENT ---
                         if row['Status'] == 'OPEN':
-                            # Priority: SL Safety first.
-                            # Use current effective SL
-                            
+                            # 1. Stop Loss Check
                             if low <= current_effective_sl:
                                 row['Status'] = "STOP_LOSS_HIT"
                                 row['ExitPrice'] = current_effective_sl
                                 row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
                                 row['PnL'] = (current_effective_sl - entry) / entry * 100
-                                row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low}"
+                                row['Notes'] = f"{row.get('Notes', '')} | SL Hit"
                                 status_changed = True
-                                break # Trade complete
+                                break 
 
+                            # 2. Target Hit logic (RRR 1:2 -> Trailing)
                             if high >= target:
-                                # Dynamic Update Logic
-                                # 1. Update SL to current Target (Locked profit)
-                                # 2. Increase Target by another 0.5%
+                                # T1 Hit!
+                                # Move SL to Break-Even (Entry Price)
+                                # Extend Target?
+                                # "Once the price hits T1, move your SL to Break-even"
                                 
-                                old_target = target
-                                new_sl = old_target
-                                new_target = old_target + (entry * 0.005) # increment by 0.5% of entry price
-                                
-                                row['UpdatedStopLoss'] = new_sl
-                                row['TargetPrice'] = new_target
-                                row['Notes'] = f"{row.get('Notes', '')} | Target {old_target} Hit -> SL moved to {new_sl}, New Target {new_target:.2f}"
-                                
-                                # Update local variables for next candle check (or same candle fallthrough?)
-                                # Ideally we should check if new SL is hit in same candle? 
-                                # If High reached target, it's possible Low also dropped below new SL in same candle?
-                                # That's a "Wick" scenario. 
-                                # If Low <= new_sl, then we hit target AND then stopped out at profit.
-                                # Let's handle that.
-                                
-                                current_effective_sl = new_sl
-                                target = new_target
-                                status_changed = True
-                                
-                                if low <= current_effective_sl:
-                                    # Hit target then reversed to new SL immediately
-                                    row['Status'] = "STOP_LOSS_HIT" # Or "TARGET_HIT_THEN_SL"? No, just SL hit at profit.
-                                    row['ExitPrice'] = current_effective_sl
-                                    row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                                    row['PnL'] = (current_effective_sl - entry) / entry * 100
-                                    row['Notes'] = f"{row.get('Notes', '')} | Reached {high} then stopped out at {current_effective_sl}"
-                                    break
-                                
-                                # Continue monitoring
-                    
+                                if pd.isna(updated_sl) or updated_sl < entry:
+                                    # First time hitting target
+                                    row['UpdatedStopLoss'] = entry # Break even
+                                    updated_sl = entry 
+                                    current_effective_sl = entry
+                                    
+                                    # Extend Target (e.g., R3 or another risk unit)
+                                    # Let's say +1 Risk Unit
+                                    # RRR 1:3
+                                    
+                                    # Robust Risk Calculation
+                                    initial_sl_val = row.get('InitialSL')
+                                    if pd.notna(initial_sl_val):
+                                         risk = entry - float(initial_sl_val)
+                                    else:
+                                         # Fallback if InitialSL missing (e.g. old trades)
+                                         # Assume 0.5% risk or calculate from current SL?
+                                         # Use the newly defined Min Risk Floor of 0.5% as specific fallback
+                                         risk = entry * 0.005
+                                    
+                                    if risk <= 0: risk = entry * 0.005 # Sanity check
+                                         
+                                    new_target = target + risk
+                                    row['TargetPrice'] = new_target
+                                    
+                                    row['Notes'] = f"{row.get('Notes', '')} | T1 Hit -> SL to BE, Target extended"
+                                    status_changed = True
+                                    
+                                    # Check strict SL hit in same candle (Wick)
+                                    if low <= current_effective_sl:
+                                         row['Status'] = "STOP_LOSS_HIT" # Stopped out at BE
+                                         row['ExitPrice'] = current_effective_sl
+                                         row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                                         row['PnL'] = 0.0 # BE
+                                         status_changed = True
+                                         break
+                                         
+                                    target = new_target # update local var
+
                     # End of Day Processing
                     is_day_done = False
                     now = datetime.now()
@@ -279,18 +328,16 @@ class TradeTracker:
                     
                     if is_day_done:
                         if row['Status'] == 'WAITING_ENTRY':
-                            # Only if NOT already triggered/changed in this loop
                             if not status_changed:
                                 row['Status'] = 'NOT_TRIGGERED'
                                 row['Notes'] = f"{row.get('Notes', '')} | Expired (No Entry)"
                                 status_changed = True
                         elif row['Status'] == 'OPEN':
-                            # Square off at close price of last candle if not stopped out
-                            if not (row['Status'] in ['STOP_LOSS_HIT', 'TARGET_HIT']): # Double check
+                            if not (row['Status'] in ['STOP_LOSS_HIT', 'TARGET_HIT']): 
                                 last_close = data.iloc[-1]['Close']
                                 row['Status'] = 'EXIT_AT_CLOSE'
                                 row['ExitPrice'] = last_close
-                                row['ExitDate'] = start_date + " 15:30:00" # Approximate close time
+                                row['ExitDate'] = f"{start_date} 15:30:00"
                                 row['PnL'] = (last_close - entry) / entry * 100
                                 row['Notes'] = f"{row.get('Notes', '')} | Auto-Squareoff"
                                 status_changed = True

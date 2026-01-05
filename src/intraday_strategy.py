@@ -56,7 +56,7 @@ def calculate_confidence(ticker_symbol):
         # Fetch Daily data for Previous Day High
         df_daily = yf.download(ticker_symbol, period='5d', interval='1d', progress=False)
         
-        if df.empty or df_daily.empty: return 0, "No Data", 0, 0, 0, 0, 0
+        if df.empty or df_daily.empty: return 0, "No Data", 0, 0, 0, 0, 0, 0, 0, 0
 
         # Fix for yfinance returning MultiIndex columns
         if isinstance(df.columns, pd.MultiIndex):
@@ -130,6 +130,16 @@ def calculate_confidence(ticker_symbol):
             score += 10
             details.append("Day Breakout (>PDH) ✅")
             
+        # ATR for Dynamic SL
+        from ta.volatility import AverageTrueRange
+        atr_indicator = AverageTrueRange(high=df['High'], low=df['Low'], close=df['Close'], window=14)
+        df['ATR'] = atr_indicator.average_true_range()
+        current_atr = df['ATR'].iloc[-1]
+        
+        # Trigger Candle High (High of the signal candle)
+        trigger_high = last['High']
+        current_vwap = last['VWAP']
+
         # Market Alignment (Simplified: Nifty Current Close > Open)
         nifty = yf.download('^NSEI', period='1d', interval='5m', progress=False)
         if not nifty.empty:
@@ -144,9 +154,9 @@ def calculate_confidence(ticker_symbol):
         prev_close = df_daily['Close'].iloc[-2]
         todays_high = df_daily['High'].iloc[-1]
         
-        # Safe Target: 0.5%
+        # Safe Target: 0.5% (This will be overridden by RRR 1:2 in tracker, but good for display)
         exit_price = todays_high * 1.005
 
-        return score, details, prev_day_high, pdl, prev_close, todays_high, exit_price
+        return score, details, prev_day_high, pdl, prev_close, todays_high, exit_price, current_atr, trigger_high, current_vwap
     except Exception as e:
-        return 0, f"Error: {e}", 0, 0, 0, 0, 0
+        return 0, f"Error: {e}", 0, 0, 0, 0, 0, 0, 0, 0

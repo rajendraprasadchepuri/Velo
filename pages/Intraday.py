@@ -39,7 +39,7 @@ if st.button("Calculate Scores"):
     total_stocks = len(WATCHLIST)
     for i, stock in enumerate(WATCHLIST):
         with st.spinner(f"Analyzing {stock}..."):
-            score, details, pdh, pdl, prev_close, todays_high, exit_price = calculate_confidence(stock)
+            score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap = calculate_confidence(stock)
             if isinstance(details, str) and details.startswith("Error"):
                  pass # Skip errors in simplified results
             else:
@@ -52,8 +52,10 @@ if st.button("Calculate Scores"):
                      "Prev Close": prev_close,
                      "Safe Entry": todays_high,
                      "Exit Price": exit_price,
-                     "Target %": "0.8%",
-                     "Time to Enter": "09:45 AM"
+                     "Time to Enter": "09:45 AM",
+                     "ATR": atr,
+                     "TriggerHigh": trigger_high,
+                     "VWAP": vwap
                  })
         progress_bar.progress((i + 1) / total_stocks)
         
