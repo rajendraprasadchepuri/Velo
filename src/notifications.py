@@ -12,7 +12,7 @@ def send_summary_email(signals):
     password = "eojxtohufkoxlqnp"
     receivers = [
     "rajendraprasadchepuri@gmail.com",
-    "gprasannakumar798@gmail.com"
+    #"gprasannakumar798@gmail.com"
 ]
     
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -55,6 +55,7 @@ def send_summary_email(signals):
         
         table1_rows += f"""
         <tr>
+            <td>{s.get('Date', datetime.now().strftime('%Y-%m-%d'))}</td>
             <td>{s['Ticker']}</td>
             <td>{s['Industry']}</td>
             <td class="{signal_class}">{s['Signal']}</td>
@@ -62,6 +63,7 @@ def send_summary_email(signals):
                 <div class="confidence-bar"><div class="confidence-fill" style="width: {conf}%;"></div></div> {conf}%
             </td>
             <td>₹{s['Current Price']}</td>
+            <td>₹{s['Entry Price']}</td>
             <td>₹{s['Stop Loss']}</td>
             <td>₹{s['Target Price']}</td>
             <td>{s['Est. Days']}</td>
@@ -106,11 +108,13 @@ def send_summary_email(signals):
         <table>
             <thead>
                 <tr>
+                    <th>Date</th>
                     <th>Stock Symbol</th>
                     <th>Sector</th>
                     <th>Trade Signal</th>
                     <th>Confidence</th>
                     <th>Current Price</th>
+                    <th>Entry Price</th>
                     <th>Stop Loss</th>
                     <th>Target Price</th>
                     <th>Timeframe</th>

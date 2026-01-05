@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import yfinance as yf
+from datetime import datetime
 
 # List of liquid stocks for MTF (Top Nifty 50 + Midcaps)
 WATCHLIST = [
@@ -28,11 +29,10 @@ WATCHLIST = [
     "TATAPOWER.NS","TORNTPHARM.NS","TVSMOTOR.NS","UBL.NS","VOLTAS.NS",
     "WHIRLPOOL.NS","ZEEL.NS"
 ]
-"""WATCHLIST = [
+WATCHLIST = [
     # NIFTY 50
     "TATASTEEL.NS","TCS.NS","TECHM.NS","TITAN.NS",
     "ULTRACEMCO.NS","UPL.NS","WIPRO.NS"]
-"""
 
 def get_ultra_precision_signal(ticker_symbol):
     try:
@@ -167,6 +167,7 @@ def get_ultra_precision_signal(ticker_symbol):
     # --- 4. Final Output Construction ---
     return {
         "Ticker": ticker_symbol,
+        "Date": datetime.now().strftime("%Y-%m-%d"),
         "Industry": industry,
         "Signal": "STRONG BUY" if score >= 80 else "BUY" if score >= 60 else "WATCH",
         "Confidence Score": score,

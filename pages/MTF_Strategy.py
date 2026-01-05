@@ -71,9 +71,10 @@ if st.session_state.scanner_results is not None:
 
         # Display Dataframe with style
         st.dataframe(
-            df[['Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Entry Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
+            df[['Date', 'Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Entry Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
             use_container_width=True,
             column_config={
+                "Date": "Date",
                 "Ticker": "Stock Symbol",
                 "Industry": "Sector",
                 "Signal": "Trade Signal",
