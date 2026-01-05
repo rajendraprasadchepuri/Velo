@@ -1,3 +1,13 @@
+"""
+Live_Performance.py
+
+Streamlit page for displaying real-time trade performance.
+Features:
+- Dashboard stats (Win Rate, Open Positions, Avg PnL).
+- Interactive Trade Log table with formatted columns.
+- Manual "Refresh" button to trigger `TradeTracker.update_status()`.
+- Separate tabs for MTF (Swing) and Intraday strategies.
+"""
 import streamlit as st
 import pandas as pd
 from src.ui import add_logo
@@ -78,17 +88,43 @@ else:
     with tab2:
         st.caption("Intraday Trades")
         df_intra = df[df['Strategy'] == 'Intraday'] if 'Strategy' in df.columns else pd.DataFrame()
+        
+        if not df_intra.empty:
+            # Format Time Columns to show only Time (HH:MM:SS) if they exist
+            if 'EntryDate' in df_intra.columns:
+                df_intra['EntryDate'] = pd.to_datetime(df_intra['EntryDate'], errors='coerce').dt.strftime('%H:%M:%S')
+            
+            if 'ExitDate' in df_intra.columns:
+                 # Only format if it's not None
+                 # We need to handle mixed types (None and strings)
+                 df_intra['ExitDate'] = pd.to_datetime(df_intra['ExitDate'], errors='coerce').dt.strftime('%H:%M:%S')
+            
+            # Recalculate PnL for display if ExitPrice exists
+            # This ensures consistency even if CSV had rounding diffs
+            # Note: We use apply to handle row-wise calculation safely
+            def calc_pnl(row):
+                if pd.notnull(row['ExitPrice']) and row['ExitPrice'] > 0 and pd.notnull(row['EntryPrice']) and row['EntryPrice'] > 0:
+                    return (row['ExitPrice'] - row['EntryPrice']) / row['EntryPrice'] * 100
+                return row['PnL']
+            
+            if 'ExitPrice' in df_intra.columns and 'EntryPrice' in df_intra.columns:
+                df_intra['PnL'] = df_intra.apply(calc_pnl, axis=1)
+
         st.dataframe(
             df_intra,
             use_container_width=True,
+            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "UpdatedStopLoss", "TargetPrice", "ExitPrice", "ExitDate", "PnL", "Notes"],
             column_config={
                 "TradeID": "ID",
                 "Ticker": "Symbol",
                 "SignalDate": "Date",
+                "EntryDate": "Entry Time",
                 "EntryPrice": st.column_config.NumberColumn("Entry", format="₹%.2f"),
                 "StopLoss": st.column_config.NumberColumn("SL", format="₹%.2f"),
+                "UpdatedStopLoss": st.column_config.NumberColumn("Updated SL", format="₹%.2f"),
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
                 "ExitPrice": st.column_config.NumberColumn("Exit Price", format="₹%.2f"),
+                "ExitDate": "Exit Time",
                 "PnL": st.column_config.NumberColumn("PnL %", format="%.2f%%"),
                 "Strategy": None
             }
