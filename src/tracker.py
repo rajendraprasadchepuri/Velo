@@ -121,33 +121,31 @@ class TradeTracker:
                 exit_date = ""
                 
                 for date, day_data in data.iterrows():
-                    # Skip the signal date itself if we assume entry happens *at* signal price 
-                    # but typically we track subsequent movement.
-                    # For simplicity, let's check High/Low of ALL available data including signal day
-                    # (Conservative: If SL hit on day 1, it's a loss. If Target hit, it's a win.)
+                    current_date_str = date.strftime("%Y-%m-%d")
                     
+                    # For MTF (Swing), skip the Signal Date to avoid look-ahead bias 
+                    # (checking High of the day which might have happened before entry)
+                    if row.get('Strategy') == 'MTF' and current_date_str == start_date:
+                        continue
+                        
                     high = day_data['High']
                     low = day_data['Low']
-                    
-                    # Logic: Did we hit SL? Did we hit Target?
-                    # Priority: If High > Target, we win. If Low < SL, we lose.
-                    # Conflict: What if both in same candle? 
-                    # Conservative approach: Assume SL hit first if close to open, or check Open vs ... 
-                    # Simplest: If Low <= SL -> Hit SL. Else if High >= Target -> Hit Target.
                     
                     if low <= sl:
                         row['Status'] = "STOP_LOSS_HIT"
                         row['ExitPrice'] = sl
-                        row['ExitDate'] = date.strftime("%Y-%m-%d")
+                        row['ExitDate'] = current_date_str
                         row['PnL'] = (sl - entry) / entry * 100
+                        row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low}"
                         status_changed = True
                         break # Trade closed
                         
                     if high >= target:
                         row['Status'] = "TARGET_HIT"
                         row['ExitPrice'] = target
-                        row['ExitDate'] = date.strftime("%Y-%m-%d")
+                        row['ExitDate'] = current_date_str
                         row['PnL'] = (target - entry) / entry * 100
+                        row['Notes'] = f"{row.get('Notes', '')} | Target Hit at {high}"
                         status_changed = True
                         break # Trade closed
                 

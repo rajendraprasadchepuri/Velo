@@ -1,0 +1,20 @@
+MultiIndex([( 'Close', 'UPL.NS'),
+            (  'High', 'UPL.NS'),
+            (   'Low', 'UPL.NS'),
+            (  'Open', 'UPL.NS'),
+            ('Volume', 'UPL.NS')],
+           names=['Price', 'Ticker'])
+Price            Close  ...   Volume
+Ticker          UPL.NS  ...   UPL.NS
+Date                    ...         
+2026-01-05  799.900024  ...  1661429
+
+[1 rows x 5 columns]
+First Row:
+Price   Ticker
+Close   UPL.NS    7.999000e+02
+High    UPL.NS    8.114500e+02
+Low     UPL.NS    7.981000e+02
+Open    UPL.NS    8.100000e+02
+Volume  UPL.NS    1.661429e+06
+Name: 2026-01-05 00:00:00, dtype: float64
