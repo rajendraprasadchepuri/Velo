@@ -122,8 +122,6 @@ def calculate_confidence(ticker_symbol):
         return 0, f"Error: {e}", 0, 0, 0, 0, 0
 
 # --- EXECUTION ---
-nifty_top_10 = ["RELIANCE.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "TCS.NS", 
-                "ITC.NS", "BHARTIARTL.NS", "AXISBANK.NS", "SBIN.NS", "LT.NS"]
 nifty_top_10 = [
     # NIFTY 50
     "ADANIENT.NS","ADANIPORTS.NS","APOLLOHOSP.NS","ASIANPAINT.NS","AXISBANK.NS",
@@ -149,6 +147,10 @@ nifty_top_10 = [
     "TATAPOWER.NS","TORNTPHARM.NS","TVSMOTOR.NS","UBL.NS","VOLTAS.NS",
     "WHIRLPOOL.NS","ZEEL.NS"
 ]
+
+if "intraday_results" not in st.session_state:
+    st.session_state.intraday_results = None
+
 if st.button("Calculate Scores"):
     results = []
     progress_bar = st.progress(0)
@@ -157,18 +159,7 @@ if st.button("Calculate Scores"):
         with st.spinner(f"Analyzing {stock}..."):
             score, details, pdh, pdl, prev_close, todays_high, exit_price = calculate_confidence(stock)
             if isinstance(details, str) and details.startswith("Error"):
-                 results.append({
-                     "Ticker": stock, 
-                     "Score": 0, 
-                     "Details": details,
-                     "PDH": 0,
-                     "PDL": 0,
-                     "Prev Close": 0,
-                     "Safe Entry": 0,
-                     "Exit Price": 0,
-                     "Target %": "-",
-                     "Time to Enter": "-"
-                 })
+                 pass # Skip errors in simplified results
             else:
                  results.append({
                      "Ticker": stock, 
@@ -185,14 +176,41 @@ if st.button("Calculate Scores"):
         progress_bar.progress((i + 1) / len(nifty_top_10))
         
     df_results = pd.DataFrame(results)
-    df_results =df_results[df_results['Score'] >= 90]
+    if not df_results.empty:
+        df_results = df_results[df_results['Score'] >= 90]
+        st.session_state.intraday_results = df_results
+    else:
+        st.session_state.intraday_results = pd.DataFrame() # Empty
+
+if st.session_state.intraday_results is not None:
+    df_display = st.session_state.intraday_results
     
     st.subheader("Analysis Results")
-    st.dataframe(df_results.style.format({
-        "Score": "{:.0f}",
-        "PDH": "{:.2f}",
-        "PDL": "{:.2f}",
-        "Prev Close": "{:.2f}",
-        "Safe Entry": "{:.2f}",
-        "Exit Price": "{:.2f}"
-    }).background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
+    if df_display.empty:
+        st.info("No stocks matched the 90+ score criteria.")
+    else:
+        st.dataframe(df_display.style.format({
+            "Score": "{:.0f}",
+            "PDH": "{:.2f}",
+            "PDL": "{:.2f}",
+            "Prev Close": "{:.2f}",
+            "Safe Entry": "{:.2f}",
+            "Exit Price": "{:.2f}"
+        }).background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
+
+        # Add to Tracker Button
+        st.markdown("---")
+        from src.tracker import TradeTracker
+        if st.button("💾 Add Intraday Signals to Live Tracker"):
+            tracker = TradeTracker()
+            count = 0
+            for index, row in df_display.iterrows():
+                # Convert row to dict for add_trade
+                row_dict = row.to_dict()
+                success, msg = tracker.add_trade(row_dict, strategy_type="Intraday")
+                if success: count += 1
+            
+            if count > 0:
+                st.success(f"Successfully added {count} trades to Live Tracker!")
+            else:
+                st.warning("No new unique trades to add.")

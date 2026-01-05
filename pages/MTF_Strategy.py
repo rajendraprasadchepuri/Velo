@@ -123,11 +123,26 @@ if st.session_state.scanner_results is not None:
             st.info("❌ No 80%+ confidence signals found today. Better to wait than force a trade.")
         else:
             st.success(f"🎯 Found {high_conviction} high-probability setups!")
+            
+            # Add to Tracker Button
+            from src.tracker import TradeTracker
+            if st.button("💾 Add High Confidence Signals to Live Tracker"):
+                tracker = TradeTracker()
+                count = 0
+                for res in results:
+                    if res.get("Signal") in ["STRONG BUY", "BUY"] and res.get("Confidence Score") >= 80:
+                        success, pid = tracker.add_trade(res, strategy_type="MTF")
+                        if success: count += 1
+                
+                if count > 0:
+                    st.success(f"Successfully added {count} trades to Live Tracker! Check 'Live Performance' page.")
+                else:
+                    st.warning("No new unique trades to add (duplicates skipped).")
 
 st.markdown("---")
 st.header("Strategy Backtest")
 st.markdown("Test the strategy performance on historical data.")
-
+# ... (rest of backtest code)
 col_b1, col_b2, col_b3 = st.columns(3, vertical_alignment="bottom")
 backtest_ticker = col_b1.text_input("Ticker Symbol", "FEDERALBNK.NS")
 backtest_years = col_b2.number_input("Years to Backtest", min_value=1, max_value=5, value=1)
