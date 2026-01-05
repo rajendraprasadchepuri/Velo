@@ -6,26 +6,29 @@ from src.intraday_strategy import WATCHLIST, calculate_confidence
 st.set_page_config(page_title="Intraday Analysis", layout="wide")
 st.title("Intraday Confidence Score")
 
-# --- EXECUTION ---
+# --- INITIALIZATION ---
 if "intraday_results" not in st.session_state:
     st.session_state.intraday_results = None
 
-# Smart Default Date Logic
+# --- SMART DATE LOGIC ---
 now = datetime.now()
+target_date = now
+session_label = "Today's Session"
+
 if now.time() > time(15, 30):
     # Market Closed: Default to Next Day
-    default_date = now + timedelta(days=1)
+    target_date = now + timedelta(days=1)
     # If default is Sat(5) or Sun(6), skip to Monday
-    while default_date.weekday() >= 5:
-        default_date += timedelta(days=1)
-else:
-    # Market Open/Pre-market: Default to Today
-    default_date = now
+    while target_date.weekday() >= 5:
+        target_date += timedelta(days=1)
+    session_label = f"Next Session ({target_date.strftime('%Y-%m-%d')})"
 
-col1, col2 = st.columns([1, 2])
-with col1:
-    selected_date = st.date_input("📅 Plan for Date", value=default_date)
+selected_date = target_date  # Used for add_trade
 
+# Display current plan mode
+st.info(f"📅 Strategy Mode: **{session_label}**")
+
+# --- CALCULATION BUTTON ---
 if st.button("Calculate Scores"):
     results = []
     progress_bar = st.progress(0)
@@ -52,42 +55,15 @@ if st.button("Calculate Scores"):
         progress_bar.progress((i + 1) / total_stocks)
         
     df_results = pd.DataFrame(results)
-
-
-if "intraday_results" not in st.session_state:
-    st.session_state.intraday_results = None
-
-if st.button("Calculate Scores"):
-    results = []
-    progress_bar = st.progress(0)
     
-    for i, stock in enumerate(nifty_top_10):
-        with st.spinner(f"Analyzing {stock}..."):
-            score, details, pdh, pdl, prev_close, todays_high, exit_price = calculate_confidence(stock)
-            if isinstance(details, str) and details.startswith("Error"):
-                 pass # Skip errors in simplified results
-            else:
-                 results.append({
-                     "Ticker": stock, 
-                     "Score": score, 
-                     "Details": ", ".join(details),
-                     "PDH": pdh,
-                     "PDL": pdl,
-                     "Prev Close": prev_close,
-                     "Safe Entry": todays_high,
-                     "Exit Price": exit_price,
-                     "Target %": "0.8%",
-                     "Time to Enter": "09:45 AM"
-                 })
-        progress_bar.progress((i + 1) / len(nifty_top_10))
-        
-    df_results = pd.DataFrame(results)
+    # Filter for high score
     if not df_results.empty:
         df_results = df_results[df_results['Score'] >= 90]
         st.session_state.intraday_results = df_results
     else:
-        st.session_state.intraday_results = pd.DataFrame() # Empty
+        st.session_state.intraday_results = pd.DataFrame() # Empty results
 
+# --- RESULTS DISPLAY ---
 if st.session_state.intraday_results is not None:
     df_display = st.session_state.intraday_results
     
@@ -104,27 +80,10 @@ if st.session_state.intraday_results is not None:
             "Exit Price": "{:.2f}"
         }).background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
 
-        # Add to Tracker Button
+        # --- ADD TO TRACKER ---
         st.markdown("---")
         from src.tracker import TradeTracker
-        from datetime import datetime, time, timedelta
-
-        # Smart Default Date Logic
-        now = datetime.now()
-        if now.time() > time(15, 30):
-            # Market Closed: Default to Next Day
-            default_date = now + timedelta(days=1)
-            # If default is Sat(5) or Sun(6), skip to Monday
-            while default_date.weekday() >= 5:
-                default_date += timedelta(days=1)
-        else:
-            # Market Open/Pre-market: Default to Today
-            default_date = now
-
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            selected_date = st.date_input("📅 Plan for Date", value=default_date)
-            
+        
         if st.button("💾 Add Intraday Signals to Live Tracker"):
             tracker = TradeTracker()
             count = 0
