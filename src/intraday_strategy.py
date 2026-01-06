@@ -165,7 +165,8 @@ def calculate_confidence(ticker_symbol):
             trigger_price = last['Low']
             target_price = safe_entry * 0.995
 
-        return final_score, final_details, prev_day_high, prev_day_low, prev_close, safe_entry, target_price, current_atr, trigger_price, current_vwap, side
+        from src.utils import round_to_tick
+        return final_score, final_details, round_to_tick(prev_day_high), round_to_tick(prev_day_low), round_to_tick(prev_close), round_to_tick(safe_entry), round_to_tick(target_price), round_to_tick(current_atr), round_to_tick(trigger_price), round_to_tick(current_vwap), side
 
     except Exception as e:
         return 0, [f"Error: {e}"], 0, 0, 0, 0, 0, 0, 0, 0, "NEUTRAL"

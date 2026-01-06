@@ -41,6 +41,14 @@ def fetch_data_robust(ticker, period="1y", interval="1d", retries=3, delay=1):
     print(f"❌ Failed to fetch data for {ticker} after {retries} attempts.")
     return None
 
+def round_to_tick(price, tick_size=0.05):
+    """
+    Rounds a price to the nearest valid tick size.
+    Example: 104.12 -> 104.10, 104.13 -> 104.15
+    """
+    if price is None: return None
+    return round(price / tick_size) * tick_size
+
 def calculate_position_size(entry_price, stop_loss, capital, risk_per_trade_percent=1.0):
     """
     Calculates robust position size based on Fixed Fractional Risk.

@@ -152,6 +152,8 @@ def get_ultra_precision_signal(ticker_symbol, nifty_df=None):
         else:
             fund_rating = "⚠️ Moderate"
 
+    from src.utils import round_to_tick
+
     return {
         "Ticker": ticker_symbol,
         "Date": datetime.now().strftime("%Y-%m-%d"),
@@ -160,10 +162,10 @@ def get_ultra_precision_signal(ticker_symbol, nifty_df=None):
         "Confidence Score": score,
         "Raw Score": score,
         "RS_Score": round(rs_score, 2), # NEW
-        "Current Price": round(latest_price, 2),
-        "Entry Price": round(entry_point, 2),
-        "Stop Loss": round(stop_loss, 2),
-        "Target Price": round(target_price, 2),
+        "Current Price": round_to_tick(latest_price),
+        "Entry Price": round_to_tick(entry_point),
+        "Stop Loss": round_to_tick(stop_loss),
+        "Target Price": round_to_tick(target_price),
         "Est. Days": f"{max(1, int(est_days))}-{max(1, int(est_days+3))} Days",
         "Reasoning": ", ".join(reasons),
         "Market Cap": market_cap,

@@ -86,6 +86,8 @@ class TradeTracker:
         # Calculate SL/Target based on ATR if available (RRR 1:2)
         side = signal_data.get('Side', 'BUY')
         
+        from src.utils import round_to_tick
+        
         # Calculate SL/Target based on ATR if available (RRR 1:2)
         if atr and float(atr) > 0:
             atr_val = float(atr)
@@ -103,8 +105,8 @@ class TradeTracker:
                 sl_price = entry_price - actual_risk
                 target_price = entry_price + (2 * actual_risk)
             
-            sl = sl_price
-            target = target_price
+            sl = round_to_tick(sl_price)
+            target = round_to_tick(target_price)
         else:
             # Fallback Defaults (0.5%)
             sl = signal_data.get('Stop Loss')
@@ -116,6 +118,9 @@ class TradeTracker:
             else:
                  if sl is None: sl = entry_price * 0.995 
                  if target is None: target = entry_price * 1.005
+                 
+            sl = round_to_tick(sl)
+            target = round_to_tick(target)
 
         initial_status = "WAITING_ENTRY" # Default for ALL strategies now (Intraday & MTF)
 
@@ -154,7 +159,7 @@ class TradeTracker:
             "Status": initial_status, 
             "ExitPrice": None,
             "ExitDate": None,
-            "EntryDate": date_str if strategy_type == "MTF" else None,
+            "EntryDate": None, # Set ONLY when Status becomes OPEN
             "UpdatedStopLoss": None,
             "PnL": 0.0,
             "Notes": signal_data.get('Signal', 'Manual'),
@@ -213,6 +218,13 @@ class TradeTracker:
                     updated_sl = row.get('UpdatedStopLoss')
                     if pd.isna(updated_sl): updated_sl = None
                     
+                    from src.utils import round_to_tick
+                    # Ensure loaded values are clean ticks (self-healing)
+                    target = round_to_tick(target)
+                    sl = round_to_tick(sl)
+                    entry = round_to_tick(entry)
+                    if updated_sl: updated_sl = round_to_tick(updated_sl)
+
                     current_effective_sl = updated_sl if updated_sl is not None else sl
                     
                     # Advanced Logic Params
@@ -403,66 +415,121 @@ class TradeTracker:
                         updates_count += 1
 
                 else:
-                    # --- MTF / SWING LOGIC (Existing) ---
-                    from src.utils import fetch_data_robust
-                    # Robust fetcher handles Period but here we need Start Date filtering.
-                    # We can fetch 1y data and filter locally.
-                    data = fetch_data_robust(ticker, period="1y", interval="1d")
+                    # --- MTF / SWING LOGIC (PRECISION UPGRADE) ---
+                    # Uses 1-Minute data for the last 5 days to capture precise execution time.
+                    
+                    data = None
+                    try:
+                        from src.utils import fetch_data_robust
+                        # Fetch 5 days of 1m data
+                        data = fetch_data_robust(ticker, period="5d", interval="1m")
+                        
+                        if data is None or data.empty:
+                             # Fallback to Daily if 1m fails (captures moves older than 5 days or liquidity issues)
+                             data = fetch_data_robust(ticker, period="1y", interval="1d")
+                    except Exception:
+                         pass
+                         
                     if data is None or data.empty: continue
                     
                     target = row['TargetPrice']
                     sl = row['StopLoss']
                     entry = row['EntryPrice']
+                    updated_sl = row.get('UpdatedStopLoss')
+                    if pd.isna(updated_sl): updated_sl = None
+                    
+                    from src.utils import round_to_tick
+                    target = round_to_tick(target)
+                    sl = round_to_tick(sl)
+                    entry = round_to_tick(entry)
+                    if updated_sl: updated_sl = round_to_tick(updated_sl)
+                    
+                    current_effective_sl = updated_sl if updated_sl is not None else sl
+
                     status_changed = False
                     
-                    for date, day_data in data.iterrows():
-                        current_date_str = date.strftime("%Y-%m-%d")
-                        
-                        # Swing: Skip Signal Date and past dates to avoid look-ahead bias
-                        if current_date_str <= start_date:
+                    for timestamp, candle in data.iterrows():
+                        # Determine date string based on index type
+                        if isinstance(timestamp, pd.Timestamp):
+                            current_dt_str = timestamp.strftime("%Y-%m-%d")
+                            exact_time_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                        else:
+                            # Fallback for daily strings
+                            current_dt_str = str(timestamp).split(" ")[0]
+                            exact_time_str = f"{current_dt_str} 15:30:00"
+
+                        # Date Filtering: Allow SAME DAY entry (Strict < check)
+                        if current_dt_str < start_date:
                             continue
                             
-                        high = day_data['High']
-                        low = day_data['Low']
-                        close = day_data['Close']
+                        high = candle['High']
+                        low = candle['Low']
+                        close = candle['Close']
                         
-                        # --- ENTRY LOGIC Check for MTF ---
-                        # If still WAITING_ENTRY, checks if price touched entry
+                        # --- ENTRY LOGIC for MTF ---
                         if row['Status'] == 'WAITING_ENTRY':
-                             # Assuming Limit Entry Logic: Did price trade through EntryPrice?
-                             # Or Stop Entry? "Strong Buy" usually Breakout -> Buy above.
-                             # But screenshot showed Entry < Current. User said "try not found".
-                             # Safe generic check: Did Low <= Entry <= High?
-                             # If yes, we assume fill.
+                             side = row.get('Side', 'BUY')
+                             triggered = False
                              
-                             if low <= entry <= high:
-                                 row['Status'] = 'OPEN'
-                                 row['EntryDate'] = current_date_str
-                                 # Entry Price remains same (limit) or slippage? Keeping strictly entry.
-                                 row['Notes'] = f"{row.get('Notes', '')} | Filled at {current_date_str}"
-                                 status_changed = True
-                                 # Continue to check SL/Target in same candle? Yes.
+                             if side == "SELL":
+                                 if low <= entry: 
+                                      triggered = True
                              else:
-                                 # Not filled yet
+                                 # Standard High/Low touch check
+                                 if low <= entry <= high: 
+                                     triggered = True
+                             
+                             if triggered:
+                                 row['Status'] = 'OPEN'
+                                 row['EntryDate'] = exact_time_str
+                                 row['Notes'] = f"{row.get('Notes', '')} | Filled at {exact_time_str}"
+                                 status_changed = True
+                             else:
                                  continue
 
                         # --- OPEN TRADE MANAGEMENT ---
                         if row['Status'] == 'OPEN':
-                            if low <= sl:
+                            side = row.get('Side', 'BUY')
+                            sl_hit = False
+                            target_hit = False
+                            
+                            # 1. Check SL
+                            if side == "SELL":
+                                if high >= current_effective_sl: sl_hit = True
+                            else:
+                                if low <= current_effective_sl: sl_hit = True
+                                
+                            if sl_hit:
                                 row['Status'] = "STOP_LOSS_HIT"
-                                row['ExitPrice'] = sl
-                                row['ExitDate'] = current_date_str
-                                row['PnL'] = (sl - entry) / entry * 100
-                                row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low}"
+                                row['ExitPrice'] = current_effective_sl
+                                row['ExitDate'] = exact_time_str
+                                
+                                if side == "SELL":
+                                     row['PnL'] = (entry - current_effective_sl) / entry * 100
+                                else:
+                                     row['PnL'] = (current_effective_sl - entry) / entry * 100
+                                     
+                                row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low if side=='BUY' else high}"
                                 status_changed = True
                                 break 
                                 
-                            if high >= target:
+                            # 2. Check Target
+                            if side == "SELL":
+                                if low <= target: target_hit = True
+                            else:
+                                if high >= target: target_hit = True
+                                
+                            if target_hit:
                                 row['Status'] = "TARGET_HIT"
                                 row['ExitPrice'] = target
-                                row['ExitDate'] = current_date_str
-                                row['PnL'] = (target - entry) / entry * 100
-                                row['Notes'] = f"{row.get('Notes', '')} | Target Hit at {high}"
+                                row['ExitDate'] = exact_time_str
+                                
+                                if side == "SELL":
+                                     row['PnL'] = (entry - target) / entry * 100
+                                else:
+                                     row['PnL'] = (target - entry) / entry * 100
+                                     
+                                row['Notes'] = f"{row.get('Notes', '')} | Target Hit at {high if side=='BUY' else low}"
                                 status_changed = True
                                 break 
                     
