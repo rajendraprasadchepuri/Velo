@@ -139,10 +139,25 @@ def calculate_confidence(ticker_symbol):
             
             if nifty_close > nifty_open:
                 bull_score += 10
-                bull_details.append("Nifty Green")
+                bull_details.append("Top-Down: Nifty Green")
             else:
                 bear_score += 10
-                bear_details.append("Nifty Red")
+                bear_details.append("Top-Down: Nifty Red")
+                
+        # --- SECTOR ALIGNMENT (SCIENTIFIC FILTER) ---
+        from src.sector_analysis import check_alignment
+        
+        # Check Bullish Sector
+        mod, reason, chg = check_alignment(ticker_symbol, "BUY")
+        if mod != 0:
+            bull_score += mod # Can be penalty
+            bull_details.append(f"Sector: {reason}")
+            
+        # Check Bearish Sector
+        mod_bear, reason_bear, chg_bear = check_alignment(ticker_symbol, "SELL")
+        if mod_bear != 0:
+            bear_score += mod_bear
+            bear_details.append(f"Sector: {reason_bear}")
         
         # --- DECISION ---
         prev_close = df_daily['Close'].iloc[-2]

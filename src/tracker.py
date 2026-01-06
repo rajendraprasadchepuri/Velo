@@ -234,15 +234,16 @@ class TradeTracker:
                     status_changed = False
                     
                     for timestamp, candle in data.iterrows():
-                        if timestamp.time() < time(9, 15): continue # changed to 09:15 to allow catching early moves if valid? No strategy says wait. 
-                        # Actually strategy says 5m close > trigger high.
-                        # Tracker is 1m. We can approximate "5m close" by checking if minute candles sustain? 
-                        # Or strictly follow "Close > TriggerHigh" on 1m basis for faster entry?
-                        # User said: "wait for the current 5-minute candle to close above".
-                        # To implement strictly 5-min close check on 1m data is hard without resampling.
-                        # Compromise: Check if 1m Close > TriggerHigh * 1.0005 (Buffer).
+                        # Convert to IST if TZ aware, else assume UTC and localize
+                        if timestamp.tzinfo is None:
+                            # Assume UTC if naive (common in some yf contexts or if we stripped it)
+                            timestamp = timestamp.tz_localize('UTC')
                         
-                        if timestamp.time() >= time(15, 30): break
+                        timestamp_ist = timestamp.tz_convert('Asia/Kolkata')
+                        current_time = timestamp_ist.time()
+                        
+                        if current_time < time(9, 15): continue 
+                        if current_time >= time(15, 30): break
 
                         high = candle['High']
                         low = candle['Low']
@@ -276,8 +277,8 @@ class TradeTracker:
                             
                             if triggered:
                                 row['Status'] = 'OPEN'
-                                row['EntryDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                                row['EntryPrice'] = entry 
+                                row['EntryDate'] = timestamp_ist.strftime("%Y-%m-%d %H:%M:%S")
+                                row['EntryPrice'] = round_to_tick(entry) 
                                 
                                 # --- DYNAMIC SL/TARGET CALCULATION ON ENTRY ---
                                 if pd.notna(atr) and float(atr) > 0:
@@ -292,13 +293,13 @@ class TradeTracker:
                                         risk_sl = entry - actual_risk
                                         t1 = entry + (2 * actual_risk)
                                     
-                                    row['StopLoss'] = risk_sl
-                                    row['InitialSL'] = risk_sl
-                                    row['TargetPrice'] = t1
+                                    row['StopLoss'] = round_to_tick(risk_sl)
+                                    row['InitialSL'] = round_to_tick(risk_sl)
+                                    row['TargetPrice'] = round_to_tick(t1)
                                     
                                     row['Notes'] = f"{row.get('Notes', '')} | Risk-Based SL/Target Set (Risk {actual_risk:.2f})"
-                                    current_effective_sl = risk_sl
-                                    target = t1
+                                    current_effective_sl = round_to_tick(risk_sl)
+                                    target = round_to_tick(t1)
                                 else:
                                      row['Notes'] = f"{row.get('Notes', '')} | Triggered at {timestamp.time()}"
 
@@ -319,7 +320,7 @@ class TradeTracker:
                             if sl_hit:
                                 row['Status'] = "STOP_LOSS_HIT"
                                 row['ExitPrice'] = current_effective_sl
-                                row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                                row['ExitDate'] = timestamp_ist.strftime("%Y-%m-%d %H:%M:%S")
                                 
                                 # PnL Logic
                                 if side == "SELL":
@@ -359,7 +360,7 @@ class TradeTracker:
                                     else:
                                         new_target = target + risk
                                         
-                                    row['TargetPrice'] = new_target
+                                    row['TargetPrice'] = round_to_tick(new_target)
                                     
                                     row['Notes'] = f"{row.get('Notes', '')} | T1 Hit -> SL to BE, Target extended"
                                     status_changed = True
@@ -451,8 +452,12 @@ class TradeTracker:
                     for timestamp, candle in data.iterrows():
                         # Determine date string based on index type
                         if isinstance(timestamp, pd.Timestamp):
-                            current_dt_str = timestamp.strftime("%Y-%m-%d")
-                            exact_time_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                            if timestamp.tzinfo is None:
+                                timestamp = timestamp.tz_localize('UTC')
+                            timestamp_ist = timestamp.tz_convert('Asia/Kolkata')
+                            
+                            current_dt_str = timestamp_ist.strftime("%Y-%m-%d")
+                            exact_time_str = timestamp_ist.strftime("%Y-%m-%d %H:%M:%S")
                         else:
                             # Fallback for daily strings
                             current_dt_str = str(timestamp).split(" ")[0]
@@ -522,7 +527,7 @@ class TradeTracker:
                             if target_hit:
                                 row['Status'] = "TARGET_HIT"
                                 row['ExitPrice'] = target
-                                row['ExitDate'] = exact_time_str
+                                row['ExitDate'] = timestamp_ist.strftime("%Y-%m-%d %H:%M:%S")
                                 
                                 if side == "SELL":
                                      row['PnL'] = (entry - target) / entry * 100

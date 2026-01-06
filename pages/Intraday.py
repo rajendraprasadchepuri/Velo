@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, time, timedelta
 from src.intraday_strategy import calculate_confidence
+from src.orb_strategy import calculate_orb_signal
 from src.config import WATCHLIST
+from src.ui import add_logo
 
 st.set_page_config(page_title="Intraday Analysis", layout="wide")
+add_logo()
 st.title("Intraday Confidence Score")
 st.markdown("""
 ### ⚡ Sniper Intraday Scanner
@@ -39,6 +42,9 @@ selected_date = target_date  # Used for add_trade
 # Display current plan mode
 st.info(f"📅 Strategy Mode: **{session_label}**")
 
+# Strategy Selection
+strategy_mode = st.radio("Select Strategy:", ["Sniper Trend (Default)", "ORB Breakout (09:15-09:45)"], horizontal=True)
+
 # --- CALCULATION BUTTON ---
 if st.button("Calculate Scores"):
     results = []
@@ -47,25 +53,42 @@ if st.button("Calculate Scores"):
     total_stocks = len(WATCHLIST)
     for i, stock in enumerate(WATCHLIST):
         with st.spinner(f"Analyzing {stock}..."):
-            score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap, side = calculate_confidence(stock)
-            if isinstance(details, str) and details.startswith("Error"):
-                 pass # Skip errors in simplified results
+            
+            if "Sniper" in strategy_mode:
+                score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap, side = calculate_confidence(stock)
+                
+                if isinstance(details, str) and details.startswith("Error"):
+                     pass 
+                else:
+                     results.append({
+                         "Ticker": stock, 
+                         "Side": side,
+                         "Score": score, 
+                         "Details": ", ".join(details),
+                         "Entry": todays_high,
+                         "Stop Loss": prev_close, # or pdl based on logic
+                         "Target": exit_price,
+                         "ATR": atr,
+                         "TriggerHigh": trigger_high,
+                         "VWAP": vwap
+                     })
             else:
-                 results.append({
-                     "Ticker": stock, 
-                     "Side": side,
-                     "Score": score, 
-                     "Details": ", ".join(details),
-                     "PDH": pdh,
-                     "PDL": pdl,
-                     "Prev Close": prev_close,
-                     "Safe Entry": todays_high,
-                     "Exit Price": exit_price,
-                     "Time to Enter": "09:45 AM",
-                     "ATR": atr,
-                     "TriggerHigh": trigger_high,
-                     "VWAP": vwap
-                 })
+                 # ORB STRATEGY
+                 score, details, orb_h, orb_l, entry, sl, target, side = calculate_orb_signal(stock)
+                 
+                 if score > 0:
+                     results.append({
+                         "Ticker": stock,
+                         "Side": side,
+                         "Score": score,
+                         "Details": ", ".join(details),
+                         "Entry": entry,
+                         "Stop Loss": sl,
+                         "Target": target,
+                         "ORB High": orb_h,
+                         "ORB Low": orb_l
+                     })
+                     
         progress_bar.progress((i + 1) / total_stocks)
         
     df_results = pd.DataFrame(results)
@@ -85,20 +108,30 @@ if st.session_state.intraday_results is not None:
     if df_display.empty:
         st.info("No stocks matched the 90+ score criteria.")
     else:
+
         # Color code Side
         def color_side(val):
-            color = 'green' if val == 'BUY' else 'red'
+            color = 'green' if val == 'BUY' else 'red' if val == 'SELL' else 'gray'
             return f'color: {color}; font-weight: bold'
 
-        st.dataframe(df_display.style.format({
-            "Score": "{:.0f}",
-            "PDH": "{:.2f}",
-            "PDL": "{:.2f}",
-            "Prev Close": "{:.2f}",
-            "Safe Entry": "{:.2f}",
-            "Exit Price": "{:.2f}"
-        }).map(color_side, subset=['Side'])
-          .background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
+        if "Sniper" in strategy_mode:
+             st.dataframe(df_display.style.format({
+                "Score": "{:.0f}",
+                "Entry": "{:.2f}",
+                "Stop Loss": "{:.2f}",
+                "Target": "{:.2f}"
+            }).map(color_side, subset=['Side'])
+              .background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
+        else:
+             st.dataframe(df_display.style.format({
+                "Score": "{:.0f}",
+                "Entry": "{:.2f}",
+                "Stop Loss": "{:.2f}",
+                "Target": "{:.2f}",
+                "ORB High": "{:.2f}",
+                "ORB Low": "{:.2f}"
+            }).map(color_side, subset=['Side'])
+              .background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
 
         # --- ADD TO TRACKER ---
         st.markdown("---")
@@ -114,7 +147,7 @@ if st.session_state.intraday_results is not None:
                 row_dict = row.to_dict()
                 success, msg = tracker.add_trade(
                     row_dict, 
-                    strategy_type="Intraday", 
+                    strategy_type="Intraday (ORB)" if "ORB" in strategy_mode else "Intraday (Sniper)", 
                     signal_date=date_str
                 )
                 if success: count += 1
