@@ -16,7 +16,9 @@ def main():
     
     for i, stock in enumerate(WATCHLIST):
         try:
-            score, details, pdh, pdl, prev_close, todays_high, exit_price = calculate_confidence(stock)
+            # UNPACKING FIX: Now captures all 10 return values
+            # Returned: score, details, prev_day_high, pdl, prev_close, todays_high, exit_price, current_atr, trigger_high, current_vwap
+            score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap = calculate_confidence(stock)
             
             if score >= 90:
                 print(f"{Fore.GREEN}[FOUND] {stock} | Score: {score} | Entry: {todays_high}{Style.RESET_ALL}")
@@ -30,6 +32,10 @@ def main():
                      "Safe Entry": todays_high,
                      "Exit Price": exit_price,
                      "Target %": "0.5%",
+                     # Pass Scientific Metrics to Tracker
+                     "ATR": atr,
+                     "TriggerHigh": trigger_high,
+                     "VWAP": vwap
                 })
             else:
                 # Optional: Print checking status

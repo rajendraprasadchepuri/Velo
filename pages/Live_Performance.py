@@ -73,17 +73,24 @@ if df.empty:
     st.info("No trades match the selected filters.")
 else:
     # --- CALCULATE METRICS ---
-    total_trades = len(df)
-    closed_trades = df[df['Status'].isin(['TARGET_HIT', 'STOP_LOSS_HIT', 'EXIT_AT_CLOSE'])]
-    open_trades = df[df['Status'] == 'OPEN']
+    # Scientific Classification:
+    # "Executed Trades": Open + Closed (Exposure taken)
+    # "Pending Orders": Waiting Entry (No exposure yet)
+    
+    pending_orders = df[df['Status'].isin(['WAITING_ENTRY', 'NOT_TRIGGERED'])]
+    executed_trades = df[~df['Status'].isin(['WAITING_ENTRY', 'NOT_TRIGGERED'])]
+    
+    closed_trades = executed_trades[executed_trades['Status'].isin(['TARGET_HIT', 'STOP_LOSS_HIT', 'EXIT_AT_CLOSE'])]
+    open_positions = executed_trades[executed_trades['Status'] == 'OPEN']
+    
+    num_executed = len(executed_trades)
+    num_pending = len(pending_orders)
     
     wins = closed_trades[closed_trades['PnL'] > 0]
     losses = closed_trades[closed_trades['PnL'] <= 0]
     
-    num_wins = len(wins)
-    num_losses = len(losses)
-    
-    win_rate = (num_wins / len(closed_trades) * 100) if len(closed_trades) > 0 else 0
+    # Win Rate (based on CLOSED trades only)
+    win_rate = (len(wins) / len(closed_trades) * 100) if len(closed_trades) > 0 else 0
     total_pnl = closed_trades['PnL'].sum()
     
     # Profit Factor
@@ -94,18 +101,11 @@ else:
     avg_win = wins['PnL'].mean() if not wins.empty else 0
     avg_loss = losses['PnL'].mean() if not losses.empty else 0
     
-    best_trade = closed_trades['PnL'].max() if not closed_trades.empty else 0
-    worst_trade = closed_trades['PnL'].min() if not closed_trades.empty else 0
-    
-    # --- EXPERT METRICS ---
-    # Expectancy (Edge) = (Win % * Avg Win) - (Loss % * Avg Loss)
-    # This is roughly equal to Avg PnL but mathematically separated
+    # Expectancy
     expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * abs(avg_loss))
     
-    # Max Drawdown
-    # Sort by date to get equity curve
+    # Max Drawdown Calculation (same as before)
     if not closed_trades.empty:
-        # Ensure we have date
         closed_trades = closed_trades.sort_values(by='SignalDate')
         closed_trades['Equity'] = closed_trades['PnL'].cumsum()
         closed_trades['Peak'] = closed_trades['Equity'].cummax()
@@ -119,17 +119,17 @@ else:
     
     # Row 1: Key KPIs
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Trades", total_trades, help="Total number of trades executed")
+    m1.metric("Executed Trades", num_executed, delta=f"{num_pending} Pending", help="Trades actually taken (vs Pending Orders)")
     m2.metric("Win Rate", f"{win_rate:.1f}%", help="Percentage of winning trades")
     m3.metric("Profit Factor", f"{profit_factor:.2f}", help="Gross Profit / Gross Loss (> 1.5 is good)")
-    m4.metric("Net Profit", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%", help=f"Gross Win ({gross_win:.2f}%) - Gross Loss ({gross_loss:.2f}%)")
+    m4.metric("Net Profit", f"{total_pnl:.2f}%", delta=f"{len(open_positions)} Open", help="Total Realized PnL")
     
     # Row 2: Expert Analysis
     e1, e2, e3, e4 = st.columns(4)
-    e1.metric("Total Win (Gross)", f"{gross_win:.2f}%", help="Sum of all winning trades")
-    e2.metric("Total Loss (Gross)", f"-{gross_loss:.2f}%", delta_color="inverse", help="Sum of all losing trades")
-    e3.metric("Expectancy", f"{expectancy:.2f}%", help="Expected return per trade (The Edge)", delta_color="normal" if expectancy > 0 else "inverse")
-    e4.metric("Max Drawdown", f"{max_dd:.2f}%", help="Maximum drop from peak equity (Capital Risk)", delta_color="inverse")
+    e1.metric("Avg Win", f"{avg_win:.2f}%")
+    e2.metric("Avg Loss", f"{avg_loss:.2f}%", delta_color="inverse")
+    e3.metric("Expectancy", f"{expectancy:.2f}%", help="Expected return per trade (The Edge)")
+    e4.metric("Max Drawdown", f"{max_dd:.2f}%", delta_color="inverse")
 
 
     # Row 3: Extremes (Optional, or can be combined)
