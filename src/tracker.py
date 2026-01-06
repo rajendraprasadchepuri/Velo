@@ -104,7 +104,7 @@ class TradeTracker:
             target = signal_data.get('Target Price')
             if target is None: target = entry_price * 1.005
 
-        initial_status = "WAITING_ENTRY" if strategy_type == "Intraday" else "OPEN"
+        initial_status = "WAITING_ENTRY" # Default for ALL strategies now (Intraday & MTF)
 
         if not existing.empty:
             existing_index = existing.index[0]
@@ -366,24 +366,47 @@ class TradeTracker:
                             
                         high = day_data['High']
                         low = day_data['Low']
+                        close = day_data['Close']
                         
-                        if low <= sl:
-                            row['Status'] = "STOP_LOSS_HIT"
-                            row['ExitPrice'] = sl
-                            row['ExitDate'] = current_date_str
-                            row['PnL'] = (sl - entry) / entry * 100
-                            row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low}"
-                            status_changed = True
-                            break 
-                            
-                        if high >= target:
-                            row['Status'] = "TARGET_HIT"
-                            row['ExitPrice'] = target
-                            row['ExitDate'] = current_date_str
-                            row['PnL'] = (target - entry) / entry * 100
-                            row['Notes'] = f"{row.get('Notes', '')} | Target Hit at {high}"
-                            status_changed = True
-                            break 
+                        # --- ENTRY LOGIC Check for MTF ---
+                        # If still WAITING_ENTRY, checks if price touched entry
+                        if row['Status'] == 'WAITING_ENTRY':
+                             # Assuming Limit Entry Logic: Did price trade through EntryPrice?
+                             # Or Stop Entry? "Strong Buy" usually Breakout -> Buy above.
+                             # But screenshot showed Entry < Current. User said "try not found".
+                             # Safe generic check: Did Low <= Entry <= High?
+                             # If yes, we assume fill.
+                             
+                             if low <= entry <= high:
+                                 row['Status'] = 'OPEN'
+                                 row['EntryDate'] = current_date_str
+                                 # Entry Price remains same (limit) or slippage? Keeping strictly entry.
+                                 row['Notes'] = f"{row.get('Notes', '')} | Filled at {current_date_str}"
+                                 status_changed = True
+                                 # Continue to check SL/Target in same candle? Yes.
+                             else:
+                                 # Not filled yet
+                                 continue
+
+                        # --- OPEN TRADE MANAGEMENT ---
+                        if row['Status'] == 'OPEN':
+                            if low <= sl:
+                                row['Status'] = "STOP_LOSS_HIT"
+                                row['ExitPrice'] = sl
+                                row['ExitDate'] = current_date_str
+                                row['PnL'] = (sl - entry) / entry * 100
+                                row['Notes'] = f"{row.get('Notes', '')} | SL Hit at {low}"
+                                status_changed = True
+                                break 
+                                
+                            if high >= target:
+                                row['Status'] = "TARGET_HIT"
+                                row['ExitPrice'] = target
+                                row['ExitDate'] = current_date_str
+                                row['PnL'] = (target - entry) / entry * 100
+                                row['Notes'] = f"{row.get('Notes', '')} | Target Hit at {high}"
+                                status_changed = True
+                                break 
                     
                     if status_changed:
                         df.loc[index] = row

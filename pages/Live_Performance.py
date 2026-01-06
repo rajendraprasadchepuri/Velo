@@ -194,16 +194,19 @@ else:
         st.dataframe(
             df_mtf,
             use_container_width=True,
+            column_order=["TradeID", "Ticker", "SignalDate", "EntryDate", "EntryPrice", "StopLoss", "TargetPrice", "Status", "ExitPrice", "ExitDate", "PnL", "Notes"],
             column_config={
                 "TradeID": "ID",
                 "Ticker": "Symbol",
-                "SignalDate": "Date",
+                "SignalDate": "Signal Date",
+                "EntryDate": st.column_config.DatetimeColumn("Entry Date", format="YYYY-MM-DD", help="Date of Entry"),
                 "EntryPrice": st.column_config.NumberColumn("Entry", format="₹%.2f"),
                 "StopLoss": st.column_config.NumberColumn("SL", format="₹%.2f"),
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
                 "ExitPrice": st.column_config.NumberColumn("Exit Price", format="₹%.2f"),
+                "ExitDate": st.column_config.DatetimeColumn("Exit Date", format="YYYY-MM-DD"),
                 "PnL": st.column_config.NumberColumn("PnL %", format="%.2f%%"),
-                "Strategy": None, # Hide strategy column as it's redundant here
+                "Strategy": None, 
                 "UpdatedStopLoss": None,
                 "ATR": None,
                 "TriggerHigh": None,
@@ -217,18 +220,14 @@ else:
         df_intra = df[df['Strategy'] == 'Intraday'] if 'Strategy' in df.columns else pd.DataFrame()
         
         if not df_intra.empty:
-            # Format Time Columns to show only Time (HH:MM:SS) if they exist
+            # Format Time Columns to show Full DateTime
             if 'EntryDate' in df_intra.columns:
-                df_intra['EntryDate'] = pd.to_datetime(df_intra['EntryDate'], errors='coerce').dt.strftime('%H:%M:%S')
+                df_intra['EntryDate'] = pd.to_datetime(df_intra['EntryDate'], errors='coerce')
             
             if 'ExitDate' in df_intra.columns:
-                 # Only format if it's not None
-                 # We need to handle mixed types (None and strings)
-                 df_intra['ExitDate'] = pd.to_datetime(df_intra['ExitDate'], errors='coerce').dt.strftime('%H:%M:%S')
+                 df_intra['ExitDate'] = pd.to_datetime(df_intra['ExitDate'], errors='coerce')
             
             # Recalculate PnL for display if ExitPrice exists
-            # This ensures consistency even if CSV had rounding diffs
-            # Note: We use apply to handle row-wise calculation safely
             def calc_pnl(row):
                 if pd.notnull(row['ExitPrice']) and row['ExitPrice'] > 0 and pd.notnull(row['EntryPrice']) and row['EntryPrice'] > 0:
                     return (row['ExitPrice'] - row['EntryPrice']) / row['EntryPrice'] * 100
@@ -236,7 +235,7 @@ else:
             
             if 'ExitPrice' in df_intra.columns and 'EntryPrice' in df_intra.columns:
                 df_intra['PnL'] = df_intra.apply(calc_pnl, axis=1)
-            # Calculate % Differences for Display
+            
             if 'EntryPrice' in df_intra.columns and 'StopLoss' in df_intra.columns:
                 df_intra['SL %'] = ((df_intra['EntryPrice'] - df_intra['StopLoss']).abs() / df_intra['EntryPrice']) * 100
             
@@ -245,11 +244,8 @@ else:
 
             # Calculate Risk and Rec Qty
             if 'EntryPrice' in df_intra.columns and 'StopLoss' in df_intra.columns:
-                 # Risk Per Share
                  df_intra['Risk'] = (df_intra['EntryPrice'] - df_intra['StopLoss']).abs()
                  
-                 # Recommended Quantity for 1 Lakh Capital (1% Risk = 1000 INR)
-                 # Qty = 1000 / Risk Per Share
                  def calc_qty(risk):
                      if risk > 0:
                          return int(1000 / risk)
@@ -265,7 +261,7 @@ else:
                 "TradeID": "ID",
                 "Ticker": "Symbol",
                 "SignalDate": "Date",
-                "EntryDate": "Entry Time",
+                "EntryDate": st.column_config.DatetimeColumn("Entry Time", format="YYYY-MM-DD HH:mm:ss"),
                 "EntryPrice": st.column_config.NumberColumn("Entry", format="₹%.2f"),
                 "StopLoss": st.column_config.NumberColumn("SL", format="₹%.2f"),
                 "SL %": st.column_config.NumberColumn("SL %", format="%.2f%%"),
@@ -275,7 +271,7 @@ else:
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
                 "Target %": st.column_config.NumberColumn("Tgt %", format="%.2f%%"),
                 "ExitPrice": st.column_config.NumberColumn("Exit Price", format="₹%.2f"),
-                "ExitDate": "Exit Time",
+                "ExitDate": st.column_config.DatetimeColumn("Exit Time", format="YYYY-MM-DD HH:mm:ss"),
                 "PnL": st.column_config.NumberColumn("PnL %", format="%.2f%%"),
                 "Strategy": None
             }
