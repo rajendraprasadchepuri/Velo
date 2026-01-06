@@ -29,26 +29,147 @@ if col_actions.button("↻ Refresh Trade Status"):
     st.rerun()
 
 # Display Stats
-df = tracker.load_trades()
+df_raw = tracker.load_trades()
+
+# --- FILTERS ---
+st.sidebar.header("🔍 Filter Trades")
+
+# 1. Strategy Filter
+strategies = df_raw['Strategy'].unique().tolist() if 'Strategy' in df_raw.columns else ['MTF', 'Intraday']
+selected_strategies = st.sidebar.multiselect("Select Strategy", options=strategies, default=strategies)
+
+# 2. Status Filter
+statuses = df_raw['Status'].unique().tolist() if not df_raw.empty else []
+selected_statuses = st.sidebar.multiselect("Select Status", options=statuses, default=statuses)
+
+# 3. Date Filter
+min_date = pd.to_datetime(df_raw['SignalDate']).min().date() if not df_raw.empty else pd.to_datetime('today').date()
+max_date = pd.to_datetime(df_raw['SignalDate']).max().date() if not df_raw.empty else pd.to_datetime('today').date()
+
+date_range = st.sidebar.date_input(
+    "Signal Date Range",
+    value=(min_date, max_date),
+    min_value=min_date,
+    max_value=max_date
+)
+
+# Apply Filters
+df = df_raw.copy()
+
+if selected_strategies:
+    df = df[df['Strategy'].isin(selected_strategies)]
+
+if selected_statuses:
+    df = df[df['Status'].isin(selected_statuses)]
+
+if isinstance(date_range, tuple) and len(date_range) == 2:
+    start_d, end_d = date_range
+    df['SignalDate'] = pd.to_datetime(df['SignalDate'])
+    df = df[(df['SignalDate'].dt.date >= start_d) & (df['SignalDate'].dt.date <= end_d)]
+    df['SignalDate'] = df['SignalDate'].dt.strftime('%Y-%m-%d')
+
 
 if df.empty:
-    st.info("No trades tracked yet. Go to 'MTF Strategy' and add some signals!")
+    st.info("No trades match the selected filters.")
 else:
-    # Key Metrics
+    # --- CALCULATE METRICS ---
     total_trades = len(df)
-    closed_trades = df[df['Status'].isin(['TARGET_HIT', 'STOP_LOSS_HIT'])]
+    closed_trades = df[df['Status'].isin(['TARGET_HIT', 'STOP_LOSS_HIT', 'EXIT_AT_CLOSE'])]
     open_trades = df[df['Status'] == 'OPEN']
     
-    wins = len(closed_trades[closed_trades['Status'] == 'TARGET_HIT'])
-    losses = len(closed_trades[closed_trades['Status'] == 'STOP_LOSS_HIT'])
-    win_rate = (wins / len(closed_trades) * 100) if len(closed_trades) > 0 else 0
-    avg_pnl = closed_trades['PnL'].mean() if not closed_trades.empty else 0
+    wins = closed_trades[closed_trades['PnL'] > 0]
+    losses = closed_trades[closed_trades['PnL'] <= 0]
     
+    num_wins = len(wins)
+    num_losses = len(losses)
+    
+    win_rate = (num_wins / len(closed_trades) * 100) if len(closed_trades) > 0 else 0
+    total_pnl = closed_trades['PnL'].sum()
+    
+    # Profit Factor
+    gross_win = wins['PnL'].sum()
+    gross_loss = abs(losses['PnL'].sum())
+    profit_factor = (gross_win / gross_loss) if gross_loss > 0 else (gross_win if gross_win > 0 else 0)
+    
+    avg_win = wins['PnL'].mean() if not wins.empty else 0
+    avg_loss = losses['PnL'].mean() if not losses.empty else 0
+    
+    best_trade = closed_trades['PnL'].max() if not closed_trades.empty else 0
+    worst_trade = closed_trades['PnL'].min() if not closed_trades.empty else 0
+    
+    # --- EXPERT METRICS ---
+    # Expectancy (Edge) = (Win % * Avg Win) - (Loss % * Avg Loss)
+    # This is roughly equal to Avg PnL but mathematically separated
+    expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * abs(avg_loss))
+    
+    # Max Drawdown
+    # Sort by date to get equity curve
+    if not closed_trades.empty:
+        # Ensure we have date
+        closed_trades = closed_trades.sort_values(by='SignalDate')
+        closed_trades['Equity'] = closed_trades['PnL'].cumsum()
+        closed_trades['Peak'] = closed_trades['Equity'].cummax()
+        closed_trades['Drawdown'] = closed_trades['Equity'] - closed_trades['Peak']
+        max_dd = closed_trades['Drawdown'].min()
+    else:
+        max_dd = 0.0
+
+    # --- DASHBOARD UI ---
+    st.markdown("### 📈 Performance Overview")
+    
+    # Row 1: Key KPIs
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Trades", total_trades)
-    m2.metric("Open Position", len(open_trades))
-    m3.metric("Win Rate", f"{win_rate:.1f}%")
-    m4.metric("Avg PnL (Closed)", f"{avg_pnl:.2f}%", delta_color="normal")
+    m1.metric("Total Trades", total_trades, help="Total number of trades executed")
+    m2.metric("Win Rate", f"{win_rate:.1f}%", help="Percentage of winning trades")
+    m3.metric("Profit Factor", f"{profit_factor:.2f}", help="Gross Profit / Gross Loss (> 1.5 is good)")
+    m4.metric("Net Return", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%", help="Total Net Profit (Sum of all PnL)")
+    
+    # Row 2: Expert Analysis
+    e1, e2, e3, e4 = st.columns(4)
+    e1.metric("Expectancy", f"{expectancy:.2f}%", help="Expected return per trade (The Edge)", delta_color="normal" if expectancy > 0 else "inverse")
+    e2.metric("Max Drawdown", f"{max_dd:.2f}%", help="Maximum drop from peak equity (Capital Risk)", delta_color="inverse")
+    e3.metric("Avg Win", f"{avg_win:.2f}%")
+    e4.metric("Avg Loss", f"{avg_loss:.2f}%", delta_color="inverse")
+
+    # Row 3: Extremes (Optional, or can be combined)
+    # Keeping it simple for now, moved Best/Worst to tooltip or secondary view if needed, 
+    # but let's keep them as a smaller section or part of insights.
+    
+    # --- RECOMMENDATIONS ENGINE ---
+    st.markdown("### 💡 Strategy Insights & Recommendations")
+    
+    insights = []
+    
+    # 1. Edge Check
+    if expectancy > 0.5:
+        insights.append(f"🔥 **Strong Edge**: Your expectancy is {expectancy:.2f}% per trade. This is excellent for compounding.")
+    elif expectancy < 0:
+        insights.append(f"🛑 **Negative Edge**: You are losing {abs(expectancy):.2f}% per trade on average. Use the 'Intraday' or 'MTF' filter to isolate the bleeding strategy.")
+
+    # 2. Risk Reward Check
+    if abs(avg_loss) > avg_win:
+        insights.append("⚠️ **Inverted Risk/Reward**: Your Avg Loss > Avg Win. You need a high win rate (>60%) to sustain this.")
+    elif avg_win > (2 * abs(avg_loss)):
+        insights.append("✅ **Sniper Risk Management**: Avg Win is >2x Avg Loss. This allows you to differ occasional losing streaks.")
+        
+    # 3. Drawdown Check
+    if abs(max_dd) > 10:
+        insights.append(f"📉 **High Drawdown**: Max Drawdown is {max_dd:.2f}%. Consider reducing position size to preserve capital stability.")
+        
+    # 4. Profit Factor Check
+    if profit_factor > 2.0:
+        insights.append("💰 **Holy Grail Territory**: Profit Factor > 2.0 is elite performance.")
+
+    if not insights:
+        st.info("Collect more data to generate specific insights.")
+    else:
+        for insight in insights:
+            if "⚠️" in insight or "🛑" in insight or "📉" in insight:
+                st.warning(insight)
+            else:
+                st.success(insight)
+
+    
     
     st.markdown("---")
     st.subheader("Trade Log")
