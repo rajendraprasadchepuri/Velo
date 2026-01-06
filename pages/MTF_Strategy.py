@@ -8,12 +8,12 @@ add_logo()
 
 st.title("Ultra-Precision MTF Strategy")
 st.markdown("""
-This **Ultra-Precision Scanner** identifies high-probability swing trades using a multi-factor model:
-
-- **📈 Trend & Momentum:** Price > EMA20 > EMA50 (Bullish Stack), RSI in sweet spot (50-75), and strong trend strength (ADX > 25).
-- **🏦 Institutional Flow:** Volume Price Trend (VPT) confirming accumulation.
-- **💎 Fundamental Quality:** Filters for profitable companies (ROE, Margins) and flags expensive valuations.
-- **🛡️ Risk Management:** Dynamic ATR-based Stop Loss and Target levels with time estimates.
+### 🌊 The Wealth Builder (Swing Strategy)
+**Ride the Major Trends.** This scanner identifies high-conviction swing trading opportunities where Daily, Weekly, and Monthly trends align perfectly.
+- **📈 Trend & Momentum:** Uses Triple EMA Stack (20/50/200) + RSI to confirm direction.
+- **🛡️ Risk Management:** Automatically calculates Position Size and Risk based on your capital.
+- **🦁 Alpha Filter:** Only selects stocks outperforming the Nifty 50 benchmark.
+**Usage:** Run this daily after market close to find your next major winning trade.
 """)
 
 # Initialize session state
@@ -45,7 +45,25 @@ if st.session_state.scanner_results is not None:
     if not results:
         st.info("No data returned or scanner failed.")
     else:
+        # --- RISK MANAGEMENT INPUTS ---
+        with st.sidebar:
+            st.header("💰 Risk Management")
+            capital = st.number_input("Total Capital (₹)", value=100000, step=10000)
+            risk_pct = st.slider("Risk Per Trade (%)", 0.5, 2.0, 1.0, 0.1)
+            
         df = pd.DataFrame(results)
+        
+        # Calculate Position Size
+        from src.utils import calculate_position_size
+        
+        def get_qty(row):
+            qty, risk_amt = calculate_position_size(row['Entry Price'], row['Stop Loss'], capital, risk_pct)
+            return qty
+
+        if not df.empty:
+            df['Rec. Qty'] = df.apply(get_qty, axis=1)
+            df['Investment'] = df['Rec. Qty'] * df['Entry Price']
+
         
         # Filter for high confidence only
         df = df[df['Confidence Score'] >= 0]
@@ -71,7 +89,7 @@ if st.session_state.scanner_results is not None:
 
         # Display Dataframe with style
         st.dataframe(
-            df[['Date', 'Ticker', 'Industry', 'Signal', 'Confidence Score', 'Current Price', 'Entry Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
+            df[['Date', 'Ticker', 'Industry', 'Signal', 'Confidence Score', 'RS_Score', 'Rec. Qty', 'Investment', 'Current Price', 'Entry Price', 'Stop Loss', 'Target Price', 'Est. Days', 'Reasoning']],
             use_container_width=True,
             column_config={
                 "Date": "Date",
@@ -80,10 +98,24 @@ if st.session_state.scanner_results is not None:
                 "Signal": "Trade Signal",
                 "Confidence Score": st.column_config.ProgressColumn(
                     "Confidence",
-                    help="Confidence score based on technicals",
+                    help="Confidence score based on technicals + Alpha",
                     format="%d%%",
                     min_value=0,
                     max_value=100,
+                ),
+                "RS_Score": st.column_config.NumberColumn(
+                    "Alpha (RS)",
+                    help="Relative Strength vs Nifty (20D Performance Gap)",
+                    format="%.2f%%"
+                ),
+                "Rec. Qty": st.column_config.NumberColumn(
+                    "Rec. Qty",
+                    help="Recommended Quantity based on Risk Management",
+                    format="%d"
+                ),
+                "Investment": st.column_config.NumberColumn(
+                    "Est. Capital",
+                    format="₹%.2f"
                 ),
                 "Current Price": st.column_config.NumberColumn(format="₹%.2f"),
                 "Entry Price": st.column_config.NumberColumn(format="₹%.2f"),

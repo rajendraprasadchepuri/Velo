@@ -6,6 +6,13 @@ from src.config import WATCHLIST
 
 st.set_page_config(page_title="Intraday Analysis", layout="wide")
 st.title("Intraday Confidence Score")
+st.markdown("""
+### ⚡ Sniper Intraday Scanner
+**Capture the Day's Move.** This tool scans the market for high-probability day trading setups using a 9-point confluence model.
+- **🎯 Strategy:** Gap Logic + RSI + VWAP + Trend Alignment.
+- **🕒 Best Time:** Run this scanning before market open (09:00 AM) or continuously during the session.
+- **🚀 Goal:** Identify stocks poised for explosive intraday momentum with clearly defined entries and exits.
+""")
 
 # --- INITIALIZATION ---
 if "intraday_results" not in st.session_state:
@@ -40,12 +47,13 @@ if st.button("Calculate Scores"):
     total_stocks = len(WATCHLIST)
     for i, stock in enumerate(WATCHLIST):
         with st.spinner(f"Analyzing {stock}..."):
-            score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap = calculate_confidence(stock)
+            score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap, side = calculate_confidence(stock)
             if isinstance(details, str) and details.startswith("Error"):
                  pass # Skip errors in simplified results
             else:
                  results.append({
                      "Ticker": stock, 
+                     "Side": side,
                      "Score": score, 
                      "Details": ", ".join(details),
                      "PDH": pdh,
@@ -77,6 +85,11 @@ if st.session_state.intraday_results is not None:
     if df_display.empty:
         st.info("No stocks matched the 90+ score criteria.")
     else:
+        # Color code Side
+        def color_side(val):
+            color = 'green' if val == 'BUY' else 'red'
+            return f'color: {color}; font-weight: bold'
+
         st.dataframe(df_display.style.format({
             "Score": "{:.0f}",
             "PDH": "{:.2f}",
@@ -84,7 +97,8 @@ if st.session_state.intraday_results is not None:
             "Prev Close": "{:.2f}",
             "Safe Entry": "{:.2f}",
             "Exit Price": "{:.2f}"
-        }).background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
+        }).map(color_side, subset=['Side'])
+          .background_gradient(subset=["Score"], cmap="RdYlGn", vmin=0, vmax=100))
 
         # --- ADD TO TRACKER ---
         st.markdown("---")

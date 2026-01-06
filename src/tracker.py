@@ -52,6 +52,7 @@ class TradeTracker:
                 if "TriggerHigh" not in df.columns: df["TriggerHigh"] = None
                 if "VWAP" not in df.columns: df["VWAP"] = None
                 if "InitialSL" not in df.columns: df["InitialSL"] = None
+                if "Side" not in df.columns: df["Side"] = "BUY" # Default to BUY
                 
             if changed:
                 df.to_csv(self.filepath, index=False)
@@ -83,26 +84,38 @@ class TradeTracker:
         vwap = signal_data.get('VWAP')
         
         # Calculate SL/Target based on ATR if available (RRR 1:2)
+        side = signal_data.get('Side', 'BUY')
+        
+        # Calculate SL/Target based on ATR if available (RRR 1:2)
         if atr and float(atr) > 0:
             atr_val = float(atr)
             atr_risk = 1.5 * atr_val
             min_risk = entry_price * 0.005
             
-            # SL = Entry - Max(1.5 * ATR, 0.5% of Entry)
             actual_risk = max(atr_risk, min_risk)
-            sl_price = entry_price - actual_risk
             
-            # Target = Entry + 2 * Risk
-            target_price = entry_price + (2 * actual_risk)
+            if side == "SELL":
+                # Short: SL above, Target below
+                sl_price = entry_price + actual_risk
+                target_price = entry_price - (2 * actual_risk)
+            else:
+                # Long: SL below, Target above
+                sl_price = entry_price - actual_risk
+                target_price = entry_price + (2 * actual_risk)
             
             sl = sl_price
             target = target_price
         else:
             # Fallback Defaults (0.5%)
             sl = signal_data.get('Stop Loss')
-            if sl is None: sl = entry_price * 0.995 
             target = signal_data.get('Target Price')
-            if target is None: target = entry_price * 1.005
+            
+            if side == "SELL":
+                 if sl is None: sl = entry_price * 1.005
+                 if target is None: target = entry_price * 0.995
+            else:
+                 if sl is None: sl = entry_price * 0.995 
+                 if target is None: target = entry_price * 1.005
 
         initial_status = "WAITING_ENTRY" # Default for ALL strategies now (Intraday & MTF)
 
@@ -149,7 +162,8 @@ class TradeTracker:
             "ATR": atr,
             "TriggerHigh": trigger_high,
             "VWAP": vwap,
-            "InitialSL": None
+            "InitialSL": None,
+            "Side": side
         }
         
         df = pd.concat([df, pd.DataFrame([new_trade])], ignore_index=True)
@@ -174,9 +188,19 @@ class TradeTracker:
             strategy = row.get('Strategy', 'MTF')
             
             try:
+                from src.utils import fetch_data_robust
                 if strategy == 'Intraday':
                     start_dt = pd.to_datetime(start_date)
                     end_dt = start_dt + pd.Timedelta(days=1)
+                    
+                    data = fetch_data_robust(ticker, period=None, interval="1m") # Need to support start/end in utils?
+                    # Utils currently only supports period/interval. Let's stick to simple downloads for now or update utils?
+                    # "fetch_data_robust" signature: (ticker, period="1y", interval="1d", retries=3, delay=1)
+                    # It doesn't support start/end.
+                    # Let's use standard yf for intraday specific date range for now, but wrapped in try-catch in robust style?
+                    # Or better, just add start/end support to util.
+                    # For now, I will use yf directly for Intraday as it needs specific start/end which my util didn't implement yet.
+                    # But for MTF (Daily), I can use the robust fetcher.
                     
                     data = yf.download(ticker, start=start_dt, end=end_dt, interval="1m", progress=False, auto_adjust=True)
                     
@@ -215,38 +239,46 @@ class TradeTracker:
                         # --- ENTRY LOGIC ---
                         if row['Status'] == 'WAITING_ENTRY':
                             triggered = False
+                            side = row.get('Side', 'BUY')
                             
                             # Standard Logic (Old)
                             if pd.isna(trigger_high): 
                                 if low <= entry <= high: triggered = True
                             else:
-                                # Advanced Logic: Candle Close > Trigger High + Buffer
+                                # Advanced Logic with "Trigger Price"
+                                # For LONG: Close > Trigger High
+                                # For SHORT: Close < Trigger Low
+                                
                                 buffer = float(trigger_high) * 0.0005
-                                target_entry = float(trigger_high) + buffer
-                                if close > target_entry:
-                                    triggered = True
-                                    entry = close # Slippage: Entry is at Close price
+                                
+                                if side == "SELL":
+                                     target_entry = float(trigger_high) - buffer # Trigger Low for short
+                                     if close < target_entry:
+                                         triggered = True
+                                         entry = close
+                                else:
+                                     target_entry = float(trigger_high) + buffer
+                                     if close > target_entry:
+                                         triggered = True
+                                         entry = close
                             
                             if triggered:
                                 row['Status'] = 'OPEN'
                                 row['EntryDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                                row['EntryPrice'] = entry # Update entry to actual execution price
+                                row['EntryPrice'] = entry 
                                 
                                 # --- DYNAMIC SL/TARGET CALCULATION ON ENTRY ---
                                 if pd.notna(atr) and float(atr) > 0:
-                                    # SL = Entry - Max(1.5 * ATR, 0.5% of Entry)
-                                    # This ensures Minimum Risk is 0.5%, so Target is at least 1%
                                     atr_risk = 1.5 * float(atr)
                                     min_risk = entry * 0.005
                                     actual_risk = max(atr_risk, min_risk)
                                     
-                                    risk_sl = entry - actual_risk
-                                    # Ensure SL is logical (below entry for long)
-                                    
-                                    # Target (RRR 1:2)
-                                    # Risk = Entry - SL
-                                    risk = entry - risk_sl
-                                    t1 = entry + (2 * risk)
+                                    if side == "SELL":
+                                        risk_sl = entry + actual_risk
+                                        t1 = entry - (2 * actual_risk) # Target below
+                                    else:
+                                        risk_sl = entry - actual_risk
+                                        t1 = entry + (2 * actual_risk)
                                     
                                     row['StopLoss'] = risk_sl
                                     row['InitialSL'] = risk_sl
@@ -263,54 +295,72 @@ class TradeTracker:
 
                         # --- OPEN TRADE MANAGEMENT ---
                         if row['Status'] == 'OPEN':
+                            side = row.get('Side', 'BUY')
+                            
                             # 1. Stop Loss Check
-                            if low <= current_effective_sl:
+                            sl_hit = False
+                            if side == "SELL":
+                                if high >= current_effective_sl: sl_hit = True
+                            else:
+                                if low <= current_effective_sl: sl_hit = True
+                                
+                            if sl_hit:
                                 row['Status'] = "STOP_LOSS_HIT"
                                 row['ExitPrice'] = current_effective_sl
                                 row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                                row['PnL'] = (current_effective_sl - entry) / entry * 100
+                                
+                                # PnL Logic
+                                if side == "SELL":
+                                    row['PnL'] = (entry - current_effective_sl) / entry * 100
+                                else:
+                                    row['PnL'] = (current_effective_sl - entry) / entry * 100
+                                    
                                 row['Notes'] = f"{row.get('Notes', '')} | SL Hit"
                                 status_changed = True
                                 break 
 
                             # 2. Target Hit logic (RRR 1:2 -> Trailing)
-                            if high >= target:
-                                # T1 Hit!
-                                # Move SL to Break-Even (Entry Price)
-                                # Extend Target?
-                                # "Once the price hits T1, move your SL to Break-even"
+                            target_hit = False
+                            if side == "SELL":
+                                if low <= target: target_hit = True
+                            else:
+                                if high >= target: target_hit = True
                                 
-                                if pd.isna(updated_sl) or updated_sl < entry:
+                            if target_hit:
+                                if pd.isna(updated_sl) or (side == "BUY" and updated_sl < entry) or (side == "SELL" and updated_sl > entry):
                                     # First time hitting target
                                     row['UpdatedStopLoss'] = entry # Break even
                                     updated_sl = entry 
                                     current_effective_sl = entry
                                     
-                                    # Extend Target (e.g., R3 or another risk unit)
-                                    # Let's say +1 Risk Unit
-                                    # RRR 1:3
-                                    
-                                    # Robust Risk Calculation
+                                    # Extend Target
                                     initial_sl_val = row.get('InitialSL')
                                     if pd.notna(initial_sl_val):
-                                         risk = entry - float(initial_sl_val)
+                                         risk = abs(entry - float(initial_sl_val))
                                     else:
-                                         # Fallback if InitialSL missing (e.g. old trades)
-                                         # Assume 0.5% risk or calculate from current SL?
-                                         # Use the newly defined Min Risk Floor of 0.5% as specific fallback
                                          risk = entry * 0.005
                                     
-                                    if risk <= 0: risk = entry * 0.005 # Sanity check
+                                    if risk <= 0: risk = entry * 0.005
                                          
-                                    new_target = target + risk
+                                    if side == "SELL":
+                                        new_target = target - risk
+                                    else:
+                                        new_target = target + risk
+                                        
                                     row['TargetPrice'] = new_target
                                     
                                     row['Notes'] = f"{row.get('Notes', '')} | T1 Hit -> SL to BE, Target extended"
                                     status_changed = True
                                     
                                     # Check strict SL hit in same candle (Wick)
-                                    if low <= current_effective_sl:
-                                         row['Status'] = "STOP_LOSS_HIT" # Stopped out at BE
+                                    sl_hit_now = False
+                                    if side == "SELL":
+                                        if high >= current_effective_sl: sl_hit_now = True
+                                    else:
+                                        if low <= current_effective_sl: sl_hit_now = True
+                                        
+                                    if sl_hit_now:
+                                         row['Status'] = "STOP_LOSS_HIT" 
                                          row['ExitPrice'] = current_effective_sl
                                          row['ExitDate'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
                                          row['PnL'] = 0.0 # BE
@@ -338,7 +388,13 @@ class TradeTracker:
                                 row['Status'] = 'EXIT_AT_CLOSE'
                                 row['ExitPrice'] = last_close
                                 row['ExitDate'] = f"{start_date} 15:30:00"
-                                row['PnL'] = (last_close - entry) / entry * 100
+                                
+                                side = row.get('Side', 'BUY')
+                                if side == "SELL":
+                                    row['PnL'] = (entry - last_close) / entry * 100
+                                else:
+                                    row['PnL'] = (last_close - entry) / entry * 100
+                                    
                                 row['Notes'] = f"{row.get('Notes', '')} | Auto-Squareoff"
                                 status_changed = True
 
@@ -348,9 +404,11 @@ class TradeTracker:
 
                 else:
                     # --- MTF / SWING LOGIC (Existing) ---
-                    data = yf.download(ticker, start=start_date, progress=False, auto_adjust=True)
-                    if data.empty: continue
-                    if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
+                    from src.utils import fetch_data_robust
+                    # Robust fetcher handles Period but here we need Start Date filtering.
+                    # We can fetch 1y data and filter locally.
+                    data = fetch_data_robust(ticker, period="1y", interval="1d")
+                    if data is None or data.empty: continue
                     
                     target = row['TargetPrice']
                     sl = row['StopLoss']

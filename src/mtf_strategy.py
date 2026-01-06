@@ -7,7 +7,7 @@ from datetime import datetime
 # List of liquid stocks for MTF (Consolidated High Liquidity + Momentum)
 from src.config import WATCHLIST
 
-def get_ultra_precision_signal(ticker_symbol):
+def get_ultra_precision_signal(ticker_symbol, nifty_df=None):
     try:
         ticker = yf.Ticker(ticker_symbol)
         ticker_info = ticker.info
@@ -25,20 +25,34 @@ def get_ultra_precision_signal(ticker_symbol):
         industry = "N/A"
         market_cap = pe_ratio = pb_ratio = roe = div_yield = op_margin = None
         
+    from src.utils import fetch_data_robust
+
     def get_data(symbol):
-        df = yf.download(symbol, period="1y", interval="1d", auto_adjust=True, progress=False)
-        if df.empty: return df
-        # Handling MultiIndex headers in newer yfinance versions
-        if isinstance(df.columns, pd.MultiIndex): 
-            df.columns = df.columns.get_level_values(0)
-        return df
+        return fetch_data_robust(symbol, period="1y", interval="1d")
 
     stock_df = get_data(ticker_symbol)
     if stock_df is None or stock_df.empty or len(stock_df) < 50: 
         return None
 
-    # --- 1. Technical Indicator Calculations ---
+    # Align with Nifty for Relative Strength
+    rs_score = 0
+    bg_color = "neutral"
     
+    if nifty_df is not None and not nifty_df.empty:
+        # Align dates
+        common_idx = stock_df.index.intersection(nifty_df.index)
+        if len(common_idx) > 20:
+            s_aligned = stock_df.loc[common_idx]
+            n_aligned = nifty_df.loc[common_idx]
+            
+            # Metric: 20-Day Performance Comparison
+            s_ret = (s_aligned['Close'].iloc[-1] / s_aligned['Close'].iloc[-20]) - 1
+            n_ret = (n_aligned['Close'].iloc[-1] / n_aligned['Close'].iloc[-20]) - 1
+            
+            rs_val = (s_ret - n_ret) * 100 # Alpha in %
+            rs_score = rs_val
+    
+    # --- 1. Technical Indicator Calculations ---
     # EMA Alignment (Trend)
     stock_df['EMA20'] = stock_df['Close'].ewm(span=20, adjust=False).mean()
     stock_df['EMA50'] = stock_df['Close'].ewm(span=50, adjust=False).mean()
@@ -54,13 +68,11 @@ def get_ultra_precision_signal(ticker_symbol):
     tr2 = abs(stock_df['High'] - stock_df['Close'].shift(1))
     tr3 = abs(stock_df['Low'] - stock_df['Close'].shift(1))
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    
     atr = tr.ewm(alpha=1/14, adjust=False).mean() # Smoothed ATR
     
     up_move = stock_df['High'].diff()
     down_move = stock_df['Low'].shift(1) - stock_df['Low']
     
-    # Corrected Vectorized DM logic
     plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
     minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
     
@@ -99,24 +111,28 @@ def get_ultra_precision_signal(ticker_symbol):
         score += 20
         reasons.append(f"Strong Trend: ADX at {round(latest['ADX'],1)}")
 
-    # Volume Confirmation (30%)
+    # Volume Confirmation (15%)
     if len(vpt) > 5 and vpt.iloc[-1] > vpt.tail(5).mean():
-        score += 30
-        reasons.append("Institutional Flow: VPT above 5-day average")
+        score += 15
+        reasons.append("Institutional Flow: VPT rising")
+
+    # ALPHA / Relative Strength (15%) - NEW!
+    if rs_score > 0:
+        score += 15
+        reasons.append(f"Alpha Leader: Outperforming Nifty by {rs_score:.1f}%")
 
     # --- 3. Dynamic Levels & Time Estimation ---
     latest_price = latest['Close']
     atr_val = atr.iloc[-1]
-
-    # Define Entry Point (If price is too far from EMA20, suggest a limit order)
+    
+    # Define Entry Point
     ema20_val = latest['EMA20']
-    if latest_price > ema20_val * 1.02: # More than 2% above EMA20
-        entry_point = ema20_val * 1.01  # Limit Order: Wait for 1% above EMA20
+    if latest_price > ema20_val * 1.02: 
+        entry_point = ema20_val * 1.01  
         entry_type = "LIMIT (Pullback)"
     else:
         entry_point = latest_price
         entry_type = "MARKET"
-
 
     stop_loss = entry_point - (1.5 * atr_val)
     target_price = entry_point + (3.0 * atr_val)
@@ -126,7 +142,6 @@ def get_ultra_precision_signal(ticker_symbol):
     velocity = avg_up if pd.notnull(avg_up) and avg_up > 0 else (atr_val * 0.5)
     est_days = round((target_price - entry_point) / velocity) if velocity > 0 else 7
 
-    # Fundamental Rating Logic
     fund_rating = "⚠️ Neutral"
     if roe is not None and op_margin is not None:
         is_quality = roe > 0.15 and op_margin > 0.10
@@ -137,7 +152,6 @@ def get_ultra_precision_signal(ticker_symbol):
         else:
             fund_rating = "⚠️ Moderate"
 
-    # --- 4. Final Output Construction ---
     return {
         "Ticker": ticker_symbol,
         "Date": datetime.now().strftime("%Y-%m-%d"),
@@ -145,6 +159,7 @@ def get_ultra_precision_signal(ticker_symbol):
         "Signal": "STRONG BUY" if score >= 80 else "BUY" if score >= 60 else "WATCH",
         "Confidence Score": score,
         "Raw Score": score,
+        "RS_Score": round(rs_score, 2), # NEW
         "Current Price": round(latest_price, 2),
         "Entry Price": round(entry_point, 2),
         "Stop Loss": round(stop_loss, 2),
@@ -160,22 +175,29 @@ def get_ultra_precision_signal(ticker_symbol):
         "Fundamental Rating": fund_rating
     }
 
-
-
 def run_pro_scanner(progress_callback=None):
     results = []
     
-    # 1. Check Global Market Guardrail (Nifty 50)
-    nifty = yf.download("^NSEI", period="1mo", interval="1d", progress=False)
-    if isinstance(nifty.columns, pd.MultiIndex): nifty.columns = nifty.columns.get_level_values(0)
+    # 1. regime Filter: Nifty 50
+    from src.utils import fetch_data_robust
+    nifty = fetch_data_robust("^NSEI", period="1y", interval="1d")
     
-    market_bullish = False
-    if not nifty.empty:
-        market_bullish = nifty['Close'].iloc[-1] > nifty['Close'].ewm(span=20).mean().iloc[-1]
+    market_status = "NEUTRAL"
+    if nifty is not None and not nifty.empty:
+        nifty_ema50 = nifty['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
+        cur_nifty = nifty['Close'].iloc[-1]
+        
+        market_bullish = cur_nifty > nifty_ema50
+        market_status = "BULLISH" if market_bullish else "BEARISH (Caution)"
+    else:
+         # Fallback if Nifty fails
+         market_bullish = True 
+         cur_nifty = 0
+         nifty_ema50 = 0
     
     warnings = []
     if not market_bullish:
-        warnings.append("⚠️ Warning: Nifty 50 is below 20-EMA. Scanner will be extra strict.")
+        warnings.append(f"⚠️ **Market Regime Filter Active**: Nifty ({int(cur_nifty)}) < EMA50 ({int(nifty_ema50)}). Buying power reduced.")
 
     total_stocks = len(WATCHLIST)
     valid_signals = []
@@ -185,16 +207,19 @@ def run_pro_scanner(progress_callback=None):
             progress_callback(i / total_stocks, f"Scanning {ticker}...")
             
         try:
-            # Reusing our high-precision logic
-            analysis = get_ultra_precision_signal(ticker) 
+            # Pass Nifty DF for RS calculation
+            analysis = get_ultra_precision_signal(ticker, nifty_df=nifty) 
             if not analysis: continue
             
-            score = analysis['Raw Score']
+            # REGIME FILTER:
+            # If Market Bearish, ONLY allow Super-High Confidence (90+) + High Alpha
+            if not market_bullish:
+                if analysis['Confidence Score'] < 90 or analysis['RS_Score'] < 0:
+                     analysis['Confidence Score'] = 0 # Suppress signal
+                     analysis['Signal'] = "SUPPRESSED (Market Regime)"
             
-            # Return all analysis so UI can filter
             results.append(analysis)
             
-            # Collect High Confidence Signals
             if analysis["Signal"] in ["BUY", "STRONG BUY"] and analysis["Confidence Score"] >= 80:
                 valid_signals.append(analysis)
                 
@@ -202,19 +227,12 @@ def run_pro_scanner(progress_callback=None):
             print(f"Error scanning {ticker}: {e}")
             continue
 
-    # Send Summary Email if matches found
     if valid_signals:
         try:
-            from .notifications import send_summary_email
+            from .notifications import send_summary_email # Relative import fix
             send_summary_email(valid_signals)
-        except ImportError:
-            try:
-                from notifications import send_summary_email
-                send_summary_email(valid_signals)
-            except Exception as e:
-                print(f"Could not import send_summary_email: {e}")
-        except Exception as e:
-            print(f"Error sending email: {e}")
+        except:
+             pass 
             
     return results, warnings
             

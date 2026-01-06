@@ -9,6 +9,14 @@ from src.ui import add_logo
 add_logo()
 
 st.title("Stock Analysis & Prediction Dashboard")
+st.markdown("""
+### 🧠 AI-Powered Market Intelligence
+**Welcome to your Command Center.** This dashboard provides a deep-dive 360° analysis of any stock ticker.
+- **📊 Technicals:** Real-time indicators trends, volatility, and momentum.
+- **📰 Sentiment:** AI analysis of latest news to gauge market mood.
+- **🔮 Prediction:** Advanced Machine Learning models (Prophet, XGBoost) to forecast future price action.
+**Usage:** Enter a ticker (e.g., RELIANCE) in the sidebar to get instant institutional-grade research.
+""")
 
 st.sidebar.header("Configuration")
 ticker_input = st.sidebar.text_input("Enter Stock Ticker (e.g., RELIANCE, TCS)", "RELIANCE")

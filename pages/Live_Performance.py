@@ -17,6 +17,13 @@ st.set_page_config(page_title="Live Performance", layout="wide")
 add_logo()
 
 st.title("📊 Live Strategy Performance")
+st.markdown("""
+### 📓 Your Scientific Trading Journal
+**Measure to Improve.** This is your source of truth. Track every trade, analyze your edge, and compound your capital properly.
+- **✅ Execution:** View Pending Orders vs. Filled Trades.
+- **💰 Risk Calculator:** Use the Global Risk sidebar to see exactly how many shares to buy for any trade.
+- **🧠 Metrics:** Monitor Win Rate, Profit Factor, and Expectancy to ensure you are trading like a Casino, not a Gambler.
+""")
 
 tracker = TradeTracker()
 
@@ -52,6 +59,12 @@ date_range = st.sidebar.date_input(
     min_value=min_date,
     max_value=max_date
 )
+
+# 4. Global Risk Params
+st.sidebar.markdown("---")
+st.sidebar.subheader("💰 Risk Calculator")
+capital_input = st.sidebar.number_input("Capital (₹)", value=100000, step=10000)
+risk_pct_input = st.sidebar.slider("Risk (%)", 0.5, 5.0, 1.0, 0.1)
 
 # Apply Filters
 df = df_raw.copy()
@@ -244,19 +257,21 @@ else:
 
             # Calculate Risk and Rec Qty
             if 'EntryPrice' in df_intra.columns and 'StopLoss' in df_intra.columns:
-                 df_intra['Risk'] = (df_intra['EntryPrice'] - df_intra['StopLoss']).abs()
-                 
-                 def calc_qty(risk):
-                     if risk > 0:
-                         return int(1000 / risk)
-                     return 0
-                 
-                 df_intra['Qty (1L)'] = df_intra['Risk'].apply(calc_qty)
+                df_intra['Risk'] = (df_intra['EntryPrice'] - df_intra['StopLoss']).abs()
+                
+                from src.utils import calculate_position_size
+                
+                def calc_qty(row):
+                    # Use global Capital/Risk from sidebar
+                    q, _ = calculate_position_size(row['EntryPrice'], row['StopLoss'], capital_input, risk_pct_input)
+                    return q
+                
+                df_intra['Qty (Rec)'] = df_intra.apply(calc_qty, axis=1)
 
         st.dataframe(
             df_intra,
             use_container_width=True,
-            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "SL %", "Risk", "Qty (1L)", "UpdatedStopLoss", "TargetPrice", "Target %", "ExitPrice", "ExitDate", "PnL", "Notes"],
+            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "SL %", "Risk", "Qty (Rec)", "UpdatedStopLoss", "TargetPrice", "Target %", "ExitPrice", "ExitDate", "PnL", "Notes"],
             column_config={
                 "TradeID": "ID",
                 "Ticker": "Symbol",
@@ -266,7 +281,7 @@ else:
                 "StopLoss": st.column_config.NumberColumn("SL", format="₹%.2f"),
                 "SL %": st.column_config.NumberColumn("SL %", format="%.2f%%"),
                 "Risk": st.column_config.NumberColumn("Risk/Share", format="₹%.2f"),
-                "Qty (1L)": st.column_config.NumberColumn("Qty (1L Cap)", format="%d"),
+                "Qty (Rec)": st.column_config.NumberColumn("Rec Qty", help=f"Qty for {risk_pct_input}% Risk on ₹{capital_input}", format="%d"),
                 "UpdatedStopLoss": st.column_config.NumberColumn("Updated SL", format="₹%.2f"),
                 "TargetPrice": st.column_config.NumberColumn("Target", format="₹%.2f"),
                 "Target %": st.column_config.NumberColumn("Tgt %", format="%.2f%%"),
