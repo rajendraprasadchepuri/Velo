@@ -141,7 +141,7 @@ class TradeTracker:
             "Status": initial_status, 
             "ExitPrice": None,
             "ExitDate": None,
-            "EntryDate": None,
+            "EntryDate": date_str if strategy_type == "MTF" else None,
             "UpdatedStopLoss": None,
             "PnL": 0.0,
             "Notes": signal_data.get('Signal', 'Manual'),
@@ -360,8 +360,8 @@ class TradeTracker:
                     for date, day_data in data.iterrows():
                         current_date_str = date.strftime("%Y-%m-%d")
                         
-                        # Swing: Skip Signal Date to avoid look-ahead bias
-                        if current_date_str == start_date:
+                        # Swing: Skip Signal Date and past dates to avoid look-ahead bias
+                        if current_date_str <= start_date:
                             continue
                             
                         high = day_data['High']
