@@ -122,14 +122,15 @@ else:
     m1.metric("Total Trades", total_trades, help="Total number of trades executed")
     m2.metric("Win Rate", f"{win_rate:.1f}%", help="Percentage of winning trades")
     m3.metric("Profit Factor", f"{profit_factor:.2f}", help="Gross Profit / Gross Loss (> 1.5 is good)")
-    m4.metric("Net Return", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%", help="Total Net Profit (Sum of all PnL)")
+    m4.metric("Net Profit", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%", help=f"Gross Win ({gross_win:.2f}%) - Gross Loss ({gross_loss:.2f}%)")
     
     # Row 2: Expert Analysis
     e1, e2, e3, e4 = st.columns(4)
-    e1.metric("Expectancy", f"{expectancy:.2f}%", help="Expected return per trade (The Edge)", delta_color="normal" if expectancy > 0 else "inverse")
-    e2.metric("Max Drawdown", f"{max_dd:.2f}%", help="Maximum drop from peak equity (Capital Risk)", delta_color="inverse")
-    e3.metric("Avg Win", f"{avg_win:.2f}%")
-    e4.metric("Avg Loss", f"{avg_loss:.2f}%", delta_color="inverse")
+    e1.metric("Total Win (Gross)", f"{gross_win:.2f}%", help="Sum of all winning trades")
+    e2.metric("Total Loss (Gross)", f"-{gross_loss:.2f}%", delta_color="inverse", help="Sum of all losing trades")
+    e3.metric("Expectancy", f"{expectancy:.2f}%", help="Expected return per trade (The Edge)", delta_color="normal" if expectancy > 0 else "inverse")
+    e4.metric("Max Drawdown", f"{max_dd:.2f}%", help="Maximum drop from peak equity (Capital Risk)", delta_color="inverse")
+
 
     # Row 3: Extremes (Optional, or can be combined)
     # Keeping it simple for now, moved Best/Worst to tooltip or secondary view if needed, 
