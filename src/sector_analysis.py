@@ -20,6 +20,10 @@ def get_sector_status(ticker):
         if data is None or data.empty:
             return sector_name, 0.0, "NEUTRAL"
             
+        import pandas as pd
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+            
         if len(data) < 2:
             # Only today's data available (maybe Monday morning?)
             # Compare Open vs Current

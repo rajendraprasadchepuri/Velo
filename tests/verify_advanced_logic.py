@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 import os
 import sys
+from datetime import datetime
 
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -20,8 +21,13 @@ class TestAdvancedLogic(unittest.TestCase):
         if os.path.exists(self.tracker_file):
             os.remove(self.tracker_file)
 
+    @patch('src.tracker.datetime')
     @patch('yfinance.download')
-    def test_entry_confirmation_and_advanced_logic(self, mock_download):
+    def test_entry_confirmation_and_advanced_logic(self, mock_download, mock_datetime):
+        # Mock current time to be 09:30 AM (During Market Hours)
+        mock_now = datetime(2026, 1, 6, 9, 30, 0)
+        mock_datetime.now.return_value = mock_now
+        mock_datetime.strftime.side_effect = lambda fmt: mock_now.strftime(fmt)
         print("\nTesting Advanced Strategy Logic...")
         
         # 1. Setup Trade with Advanced Params
@@ -40,7 +46,10 @@ class TestAdvancedLogic(unittest.TestCase):
         # Candle 2: 09:17 - High 100.5, Low 99.5, Close 100.2 (Entry! Close > 100.05)
         # Wait, buffer is 0.05% of 100 = 0.05. Target Entry > 100.05.
         
-        dates = pd.to_datetime(["2026-01-06 09:16:00", "2026-01-06 09:17:00"])
+        # Candle 1: 03:46 UTC (09:16 IST)
+        # Candle 2: 03:47 UTC (09:17 IST)
+        
+        dates = pd.to_datetime(["2026-01-06 03:46:00", "2026-01-06 03:47:00"]).tz_localize('UTC')
         data_entry = pd.DataFrame({
             "Open": [99.0, 99.5],
             "High": [100.0, 100.5],
@@ -73,7 +82,8 @@ class TestAdvancedLogic(unittest.TestCase):
         
         # 3. Mock Data for Target Hit
         # Candle 3: 09:18 - High 106.5 (Hits 106.2), Close 105.0
-        dates_target = pd.to_datetime(["2026-01-06 09:16:00", "2026-01-06 09:17:00", "2026-01-06 09:18:00"])
+        # Candle 3: 03:48 UTC (09:18 IST) - High 106.5 (Hits 106.2)
+        dates_target = pd.to_datetime(["2026-01-06 03:46:00", "2026-01-06 03:47:00", "2026-01-06 03:48:00"]).tz_localize('UTC')
         data_target = pd.DataFrame({
             "Open": [99.0, 99.5, 100.2],
             "High": [100.0, 100.5, 106.5],

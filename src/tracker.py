@@ -77,7 +77,7 @@ class TradeTracker:
         existing = df[(df['Ticker'] == ticker) & (df['SignalDate'] == date_str) & (df['Strategy'] == strategy_type)]
         
         # Parse common fields
-        entry_price = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', 0))))
+        entry_price = float(signal_data.get('Entry Price', signal_data.get('Current Price', signal_data.get('Safe Entry', signal_data.get('Entry', 0)))))
         
         atr = signal_data.get('ATR')
         trigger_high = signal_data.get('TriggerHigh')
@@ -110,7 +110,7 @@ class TradeTracker:
         else:
             # Fallback Defaults (0.5%)
             sl = signal_data.get('Stop Loss')
-            target = signal_data.get('Target Price')
+            target = signal_data.get('Target Price', signal_data.get('Target'))
             
             if side == "SELL":
                  if sl is None: sl = entry_price * 1.005
