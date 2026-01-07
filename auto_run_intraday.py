@@ -12,6 +12,7 @@ def main():
     print(f"{Fore.CYAN}--- Auto Intraday Scanner Started at {datetime.now()} ---{Style.RESET_ALL}")
     
     results = []
+    all_scanned = []
     print(f"Scanning {len(WATCHLIST)} stocks...")
     
     for i, stock in enumerate(WATCHLIST):
@@ -40,12 +41,27 @@ def main():
                      "VWAP": vwap,
                      "Side": side
                 })
-            else:
-                # Optional: Print checking status
-                if i % 10 == 0: print(f"Checked {i}/{len(WATCHLIST)}...")
+            
+            # --- NEW LOGGING: Collect all scores for debugging ---
+            all_scanned.append({"Ticker": stock, "Score": score, "Details": details})
+            
+            if score >= 80 and score < 90:
+                 print(f"{Fore.YELLOW}[CLOSE CALL] {stock} | Score: {score} | Missing: {set(['Trend > EMA200', 'Val > VWAP', 'VSA Bull Vol', 'MACD Bull Cross', 'Price > BB Mid', 'RSI Bullish (>60)', 'Breakout > PDH']) - set(details)}{Style.RESET_ALL}")
+                 print(f"Details: {details}")
+
+            if score < 90:
+                 if i % 10 == 0: print(f"Checked {i}/{len(WATCHLIST)}... (Last: {stock} @ {score})")
                 
         except Exception as e:
             print(f"{Fore.RED}Error scanning {stock}: {e}{Style.RESET_ALL}")
+
+    # --- ANALYSIS: Print Top 5 Missed Opportunities ---
+    if all_scanned:
+        print(f"\n{Fore.YELLOW}--- Top 5 Missed Opportunities (Score < 90) ---{Style.RESET_ALL}")
+        all_scanned.sort(key=lambda x: x['Score'], reverse=True)
+        for item in all_scanned[:5]:
+            print(f"{item['Ticker']}: {item['Score']} | {item['Details']}")
+        print("---------------------------------------------------\n")
 
     if not results:
         print(f"{Fore.YELLOW}No High Confidence (90+) signals found today.{Style.RESET_ALL}")
