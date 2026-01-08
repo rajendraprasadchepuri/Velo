@@ -145,9 +145,14 @@ if st.session_state.intraday_results is not None:
             for index, row in df_display.iterrows():
                 # Convert row to dict for add_trade
                 row_dict = row.to_dict()
+                
+                # FIX: Ensure Strategy matches exactly "Intraday" for Tracker and UI logic
+                # Pass specific mode in Notes/Signal
+                row_dict['Signal'] = f"Manual | {strategy_mode}"
+                
                 success, msg = tracker.add_trade(
                     row_dict, 
-                    strategy_type="Intraday (ORB)" if "ORB" in strategy_mode else "Intraday (Sniper)", 
+                    strategy_type="Intraday", 
                     signal_date=date_str
                 )
                 if success: count += 1
