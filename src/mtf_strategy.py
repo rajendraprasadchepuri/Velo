@@ -238,7 +238,7 @@ def run_pro_scanner(progress_callback=None):
             
     return results, warnings
             
-    return results, warnings
+
 
 def run_strategy_backtest(ticker_symbol, sector_index="^NSEBANK", years=1):
     # 1. Fetch Data for Stock and Sector
