@@ -230,7 +230,7 @@ else:
 
     with tab2:
         st.caption("Intraday Trades")
-        df_intra = df[df['Strategy'] == 'Intraday'] if 'Strategy' in df.columns else pd.DataFrame()
+        df_intra = df[df['Strategy'] == 'Intraday'].copy() if 'Strategy' in df.columns else pd.DataFrame()
         
         if not df_intra.empty:
             # Format Time Columns to show Full DateTime
@@ -243,7 +243,14 @@ else:
             # Recalculate PnL for display if ExitPrice exists
             def calc_pnl(row):
                 if pd.notnull(row['ExitPrice']) and row['ExitPrice'] > 0 and pd.notnull(row['EntryPrice']) and row['EntryPrice'] > 0:
-                    return (row['ExitPrice'] - row['EntryPrice']) / row['EntryPrice'] * 100
+                    entry = row['EntryPrice']
+                    exit_p = row['ExitPrice']
+                    side = row.get('Side', 'BUY')
+                    
+                    if side == 'SELL':
+                        return (entry - exit_p) / entry * 100
+                    else:
+                        return (exit_p - entry) / entry * 100
                 return row['PnL']
             
             if 'ExitPrice' in df_intra.columns and 'EntryPrice' in df_intra.columns:
@@ -271,10 +278,11 @@ else:
         st.dataframe(
             df_intra,
             use_container_width=True,
-            column_order=["Status", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "SL %", "Risk", "Qty (Rec)", "UpdatedStopLoss", "TargetPrice", "Target %", "ExitPrice", "ExitDate", "PnL", "Notes"],
+            column_order=["Status", "Side", "SignalDate", "Ticker", "EntryDate", "EntryPrice", "StopLoss", "SL %", "Risk", "Qty (Rec)", "UpdatedStopLoss", "TargetPrice", "Target %", "ExitPrice", "ExitDate", "PnL", "Notes"],
             column_config={
                 "TradeID": "ID",
                 "Ticker": "Symbol",
+                "Side": st.column_config.TextColumn("Side"),
                 "SignalDate": "Date",
                 "EntryDate": st.column_config.DatetimeColumn("Entry Time", format="YYYY-MM-DD HH:mm:ss"),
                 "EntryPrice": st.column_config.NumberColumn("Entry", format="₹%.2f"),
