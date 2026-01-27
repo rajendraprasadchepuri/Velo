@@ -4,8 +4,9 @@ numpy
 scikit-learn
 ta
 textblob
-streamlit
 plotly
 xgboost
 prophet
 statsmodels
+streamlit==1.19.0
+altair==4.2.2
