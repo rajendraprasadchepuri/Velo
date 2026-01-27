@@ -43,8 +43,8 @@ def get_sector_status(ticker):
         
         return sector_name, change, trend
         
-    except Exception as e:
-        print(f"Sector Error ({ticker}): {e}")
+    except Exception:
+        # Silently fail for sector data (it's secondary)
         return sector_name, 0.0, "NEUTRAL"
 
 def check_alignment(ticker, trade_side):

@@ -170,14 +170,14 @@ def calculate_confidence(ticker_symbol):
             final_details = bull_details
             side = "BUY"
             safe_entry = todays_high
-            trigger_price = last['High']
+            trigger_price = safe_entry # FIX: Use Daily High as Trigger (Breakout)
             target_price = safe_entry * 1.005
         else:
             final_score = bear_score
             final_details = bear_details
             side = "SELL"
             safe_entry = todays_low
-            trigger_price = last['Low']
+            trigger_price = safe_entry # FIX: Use Daily Low as Trigger (Breakdown)
             target_price = safe_entry * 0.995
 
         from src.utils import round_to_tick

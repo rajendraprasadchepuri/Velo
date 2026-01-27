@@ -22,7 +22,7 @@ def main():
             score, details, pdh, pdl, prev_close, todays_high, exit_price, atr, trigger_high, vwap, side = calculate_confidence(stock)
             
             if score >= 90:
-                print(f"{Fore.GREEN}[FOUND] {stock} | Score: {score} | Entry: {todays_high}{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}[FOUND] {stock} | Score: {score} | Entry (Daily Level): {trigger_high}{Style.RESET_ALL}")
                 results.append({
                      "Ticker": stock, 
                      "Score": score, 

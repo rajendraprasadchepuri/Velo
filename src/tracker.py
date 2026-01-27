@@ -198,7 +198,7 @@ class TradeTracker:
                     start_dt = pd.to_datetime(start_date)
                     end_dt = start_dt + pd.Timedelta(days=1)
                     
-                    data = fetch_data_robust(ticker, period=None, interval="1m") # Need to support start/end in utils?
+                    # data = fetch_data_robust(ticker, period=None, interval="1m") # REMOVED: Redundant and causes issues with small data checks
                     # Utils currently only supports period/interval. Let's stick to simple downloads for now or update utils?
                     # "fetch_data_robust" signature: (ticker, period="1y", interval="1d", retries=3, delay=1)
                     # It doesn't support start/end.

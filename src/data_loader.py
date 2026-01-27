@@ -1,6 +1,8 @@
 import yfinance as yf
 import pandas as pd
+import streamlit as st
 
+@st.cache_data(ttl=300) # Cache for 5 minutes
 def fetch_stock_data(ticker, period="max"):
     """
     Fetches historical stock data from yfinance.
@@ -59,6 +61,7 @@ def fetch_news(ticker):
         print(f"Error fetching news for {ticker}: {e}")
         return []
 
+@st.cache_data(ttl=3000) # Cache for 50 Mins
 def fetch_benchmark(period="max", ticker="^NSEI"):
     """
     Fetches historical data for a benchmark index (default Nifty 50).

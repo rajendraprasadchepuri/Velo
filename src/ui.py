@@ -38,9 +38,9 @@ def add_logo():
         """
         <style>
             [data-testid="stLogo"] {
-                height: 5.5rem !important;
+                height: 3.5rem !important;
                 width: auto !important;
-                max-width: 100% !important;
+                max-width: 90% !important;
             }
         </style>
         """,

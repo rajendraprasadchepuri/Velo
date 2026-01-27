@@ -55,7 +55,7 @@ def calculate_position_size(entry_price, stop_loss, capital, risk_per_trade_perc
     
     Formula: 
     Risk Amount = Capital * (Risk% / 100)
-    Risk Per Share = Entry - SL
+    Risk Per Share = |Entry - SL|
     Qty = Risk Amount / Risk Per Share
     """
     try:
@@ -64,10 +64,10 @@ def calculate_position_size(entry_price, stop_loss, capital, risk_per_trade_perc
         cap = float(capital)
         
         if entry <= 0 or sl <= 0 or cap <= 0: return 0, 0
-        if sl >= entry: return 0, 0 # Invalid SL for Long
+        if entry == sl: return 0, 0 # Avoid division by zero
         
         risk_amount = cap * (risk_per_trade_percent / 100)
-        risk_per_share = entry - sl
+        risk_per_share = abs(entry - sl)
         
         if risk_per_share <= 0: return 0, 0
         

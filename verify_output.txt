@@ -1,0 +1,27 @@
+C:\Users\rajendra.chepuri\OneDrive - TTEC Digital\Documents\C_Drive\prs\git\Velo\src\tracker.py:174: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat([df, pd.DataFrame([new_trade])], ignore_index=True)
+C:\Users\rajendra.chepuri\OneDrive - TTEC Digital\Documents\C_Drive\prs\git\Velo\src\tracker.py:415: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '2024-01-01 15:30:00' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
+  df.loc[index] = row
+C:\Users\rajendra.chepuri\OneDrive - TTEC Digital\Documents\C_Drive\prs\git\Velo\src\tracker.py:415: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '2024-01-01 14:45:00' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
+  df.loc[index] = row
+Starting Verification...
+
+1. Adding Initial Intraday Trade...
+Trade Added. Status: WAITING_ENTRY
+
+2. Running Update (Entry Trigger + Target Hit)...
+Status: EXIT_AT_CLOSE
+Entry Time: 2024-01-01 14:45:00
+Updated SL: 100.0
+New Target: 101.5
+Notes: Test Signal | Triggered at 09:15:00 | T1 Hit -> SL to BE, Target extended | Auto-Squareoff
+SUCCESS: Entry Date set
+FAILURE: SL expected 101.0, got 100.0
+SUCCESS: Target moved to 101.5
+
+3. Running Update (Trailing SL Hit)...
+Status: EXIT_AT_CLOSE
+Exit Price: 101.2
+Exit Time: 2024-01-01 15:30:00
+FAILURE: Status expected STOP_LOSS_HIT, got EXIT_AT_CLOSE
+FAILURE: Exit Price expected 101.0, got 101.2
